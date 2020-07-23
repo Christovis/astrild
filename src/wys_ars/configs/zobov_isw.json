@@ -1,0 +1,6 @@
+{
+    "extend": 5,
+    "nr_profile_bins": 20,
+    "nr_radius_bins": 5,
+    "obj_num_in_radbin": 10
+}

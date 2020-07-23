@@ -1,0 +1,9 @@
+# Settings for halo statistics
+# limit:
+#   masses: [Mpc/h]
+#   distances: [Mpc/h]
+concentration_mass_rel:
+  resolution: 1000
+  args:
+    limits: !!python/tuple [13.50, 15.40]
+    nbins: 20

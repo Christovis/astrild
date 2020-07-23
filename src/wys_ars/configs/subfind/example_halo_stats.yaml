@@ -1,0 +1,12 @@
+# Settings for halo statistics
+# limit:
+#   masses: [Mpc/h]
+#   distances: [Mpc/h]
+mean_pairwise_velocity:
+  resolution: 100
+  args:
+    limits: null
+    nbins: null
+    boxsize: 500.
+    seperate: null
+    #Group_M_Crit200: 14

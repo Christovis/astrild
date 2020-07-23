@@ -1,0 +1,9 @@
+/.coverage
+/.mypy_cache/
+/.nox/
+/.python-version
+/.pytype/
+/docs/_build/
+/dist/
+/src/*.egg-info/
+__pycache__/

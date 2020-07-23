@@ -1,0 +1,49 @@
+sim1:
+  type: 'rays'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_1/box1/'
+    dir_out: null
+    file_dsc:
+      root: 'Ray_maps'
+      extension: 'h5'
+    dir_root: null
+
+sim2:
+  type: 'rays'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_1/box2/'
+    dir_out: null
+    file_dsc:
+      root: 'Ray_maps'
+      extension: 'h5'
+    dir_root: null
+
+sim3:
+  type: 'rays'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_1/box3/'
+    dir_out: null
+    file_dsc:
+      root: 'Ray_maps'
+      extension: 'h5'
+    dir_root: null
+
+sim4:
+  type: 'rays'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_1/box4/'
+    dir_out: null
+    file_dsc:
+      root: 'Ray_maps'
+      extension: 'h5'
+    dir_root: null
+
+sim5:
+  type: 'rays'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_1/box5/'
+    dir_out: null
+    file_dsc:
+      root: 'Ray_maps'
+      extension: 'h5'
+    dir_root: null

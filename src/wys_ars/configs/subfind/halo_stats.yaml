@@ -1,0 +1,29 @@
+# Settings for halo statistics
+# limit:
+#   masses: [Mpc/h]
+#   distances: [Mpc/h]
+halo_mass_fct:
+  resolution: 100
+  args:
+    limits: !!python/tuple [11.78, 16]
+    nbins: 20
+mean_pairwise_velocity:
+  resolution: 100
+  args:
+    limits: null
+    nbins: null
+    boxsize: 500.
+    seperate:
+      Group_M_Crit200: 14
+two_point_corr_fct:
+  resolution: 100
+  args:
+    limits: null
+    nbins: null
+    boxsize: 500.
+#concentration_mass_rel:
+#  resolution: 1000
+#  args:
+#    limits: !!python/tuple [11.78, 16]
+#    nbins: 20
+#    method: 'prada'

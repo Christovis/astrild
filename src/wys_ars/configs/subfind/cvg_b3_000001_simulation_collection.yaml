@@ -1,0 +1,59 @@
+sim1:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_000001/box1/'
+    dir_out: null
+    file_dsc:
+      root: 'phidot'
+      extension: 'dat'
+    dir_root: 'snapdir'
+    boxsize: 500.
+    domain_level: 512
+
+sim2:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_000001/box2/'
+    dir_out: null
+    file_dsc:
+      root: 'phidot'
+      extension: 'dat'
+    dir_root: 'snapdir'
+    boxsize: 500.
+    domain_level: 512
+
+sim3:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_000001/box3/'
+    dir_out: null
+    file_dsc:
+      root: 'phidot'
+      extension: 'dat'
+    dir_root: 'snapdir'
+    boxsize: 500.
+    domain_level: 512
+
+sim4:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_000001/box4/'
+    dir_out: null
+    file_dsc:
+      root: 'phidot'
+      extension: 'dat'
+    dir_root: 'snapdir'
+    boxsize: 500.
+    domain_level: 512
+
+sim5:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma6/data/dp004/cubic_vector_galileon/lightcone_cvg_b3_000001/box5/'
+    dir_out: null
+    file_dsc:
+      root: 'phidot'
+      extension: 'dat'
+    dir_root: 'snapdir'
+    boxsize: 500.
+    domain_level: 512
