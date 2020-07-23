@@ -21,9 +21,9 @@ two_point_corr_fct:
     limits: null
     nbins: null
     boxsize: 500.
-#concentration_mass_rel:
-#  resolution: 1000
-#  args:
-#    limits: !!python/tuple [11.78, 16]
-#    nbins: 20
-#    method: 'prada'
+concentration_mass_rel:
+  resolution: 1000
+  args:
+    limits: !!python/tuple [11.78, 16]
+    nbins: 20
+    method: 'prada'
