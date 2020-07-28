@@ -44,7 +44,7 @@ class SubFind:
                 box size of the simulation in the same units as positions.
         """
         if boxsize is None:
-            boxsize = snapshot.header.boxsize / 1e3  # [Mpc/h]
+            boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
         if limits is None:
             limits = (0.3, boxsize / 10)
         if nbins is None:
@@ -53,8 +53,8 @@ class SubFind:
         r = np.geomspace(min(limits), max(limits), nbins)
         r_c = 0.5 * (r[1:] + r[:-1])
         real_tpcf = mo.tpcf(
-            snapshot.cat["GroupPos"][:] * snapshot.header.hubble / 1e3,  # [Mpc/h]
-            rbins=r,  # [Mpc/h]
+            snapshot.cat["GroupPos"][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
+            rbins=r,  #[Mpc/h]
             period=boxsize,
             estimator="Landy-Szalay",
         )

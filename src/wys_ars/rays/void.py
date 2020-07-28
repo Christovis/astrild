@@ -142,6 +142,9 @@ class Voids:
         Returns:
         """
         _skymap = self._read_skymap(self.skymap_dsc["file"])
+        # center map on zero
+        _skymap -= np.mean(_skymap)
+
         if self.finder_spec["name"] == "tunnels":
             self.data = self._trim_edges(
                 self.data, radii_max, self.skymap_dsc["npix"],
@@ -180,7 +183,8 @@ class Voids:
         _obj_size_max = np.zeros(tuple(cat_per_cats))
         _obj_in_cat = np.zeros(tuple(cat_per_cats))
 
-        for ss, sigma in enumerate(cats_dict["sigma"]):  # create dynamic for-loops via recursion
+        #TODO create dynamic for-loops via recursion
+        for ss, sigma in enumerate(cats_dict["sigma"]):
             # filter voids
             _void_in_cat = self.data.loc[self.data["sigma"] == sigma]
             # clean-up and averaging profiles

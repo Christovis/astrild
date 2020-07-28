@@ -22,6 +22,11 @@ class TunnelsFinder:
     Source: arxiv:1710.01730
 
     Attributes:
+        file_in:
+        opening_angle:
+        npix:
+        kernel_width:
+            smoothing kernel; [deg]
 
     Methods:
     """
@@ -47,6 +52,7 @@ class TunnelsFinder:
         Args:
         Returns:
         """
+        #TODO substract average before finding peaks
         Convmap = ConvergenceMap.load(self.file_in)
         # define peak thresholds
         thresholds = np.arange(
@@ -63,6 +69,7 @@ class TunnelsFinder:
         # delete .fits file to free memory
         # os.remove(mapfile_fits)
 
+        # remove peaks too close to edge
         self.peaks_orig = {}
         (
             self.peaks_orig["kappa"],
@@ -90,11 +97,20 @@ class TunnelsFinder:
         self,
         kappa: np.ndarray,
         nu: np.ndarray,
-        pos: np.ndarray
+        pos: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Remove peaks within 1 smoothing length from map edges
+        
         Args:
+            kappa:
+            nu:
+            pos:
+
+        Returns:
+            kappa:
+            nu:
+            pos:
         """
         pixlen = self.opening_angle / self.npix  #[deg]
         bufferlen = np.ceil(self.k_width / (60 * pixlen))  # length of buffer zone

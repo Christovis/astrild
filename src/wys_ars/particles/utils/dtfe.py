@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import List, Union
 
 import numpy as np
 
@@ -20,18 +20,20 @@ class DTFE:
     """
 
     def estimate_field(
-        quantity: str, file_in: str, file_out: str, domain_level: int = 512,
+        quantities: List[str], file_in: str, file_out: str, domain_level: int = 512,
     ) -> None:
         """
         Args:
             quantity:
+                e.g. [density, velocity, divergence, vorticity]
             file_in:
             file_out:
             domain_level:
         """
+        quantities = " ".join(quantities)
         os.system(
             f"/cosma/home/dp004/dc-beck3/3_Proca/dtfe/" + \
-            f"DTFE {file_in} {file_out} -g {domain_level} -p -f {quantity}"
+            f"DTFE {file_in} {file_out} -g {domain_level} -p -f {quantities}"
         )
 
     def binary_to_array(

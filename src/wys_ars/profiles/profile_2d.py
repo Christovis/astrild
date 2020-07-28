@@ -200,7 +200,8 @@ def mean_and_interpolate(
     profile, objects_rad: float, extend: float, nr_rad_bins: int,
 ) -> np.array:
     """
-    Get the mean profile of all the profiles of objects
+    Get the mean profile of all the profiles of objects, which are weighted
+    by their size.
 
     Args:
         profile: np.array of 2D np.ndarray containing radii and values

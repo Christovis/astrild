@@ -58,7 +58,7 @@ class PowerSpectrum:
             snap_nrs = self.sim.get_file_nrs(file_dsc, dir_in, "max")
             _file_paths = self.sim.get_file_paths(file_dsc, dir_in, "max")
 
-        pk = {"k": {}, "power": {}}
+        pk = {"k": {}, "P": {}}
         for snap_nr, file_path in zip(snap_nrs, _file_paths):
             value_map = self._read_data(file_path, quantity)
             if len(value_map.shape) == 3:
@@ -70,7 +70,7 @@ class PowerSpectrum:
                     f"{len(value_map.shape)}D is not supported :-("
                 )
             pk["k"]["snap_%d" % snap_nr] = k
-            pk["power"]["snap_%d" % snap_nr] = Pk
+            pk["P"]["snap_%d" % snap_nr] = Pk
         
         if len(_file_paths) > 1:
             # check that wavenumbers of different snapshots are the same
@@ -155,7 +155,7 @@ class PowerSpectrum:
                 Simulation power spectra for different snapshots/redshifts.
         """
         _columns = list(pk["k"].keys())
-        df = pd.DataFrame(data=pk["power"], index=pk["k"][_columns[0]],)
+        df = pd.DataFrame(data=pk["P"], index=pk["k"][_columns[0]],)
         file_out = self.sim.dirs["out"] + "pk_%s.h5" % (quantity)
         if os.path.exists(file_out):
             os.remove(file_out)

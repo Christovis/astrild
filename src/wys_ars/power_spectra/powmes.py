@@ -81,17 +81,20 @@ class PowMes(PowerSpectrum):
                 f"in:\n{self.sim.dir_nrs}"
             )
             _file_paths = self.sim.get_file_paths(
-                file_dsc, directory, "max"
+                file_dsc, directory, uniques="max"
             )
         else:
-            snap_nrs = self.sim.get_file_nrs(file_dsc, directory, "max")
-            _file_paths = self.sim.get_file_paths(file_dsc, directory, "max")
+            snap_nrs = self.sim.get_file_nrs(file_dsc, directory, uniques="max", sort=True)
+            _file_paths = self.sim.get_file_paths(file_dsc, directory, uniques="max")
 
-        pk = {"k": {}, "power": {}}
+        print(snap_nrs, _file_paths)
+
+        pk = {"k": {}, "P": {}}
         for snap_nr, file_path in zip(snap_nrs, _file_paths):
             k, Pk = self.read_file(file_path, self.sim.boxsize, self.sim.npar)
+            print('-----------', snap_nr, Pk[-10:])
             pk["k"]["snap_%d" % snap_nr] = k
-            pk["power"]["snap_%d" % snap_nr] = Pk
+            pk["P"]["snap_%d" % snap_nr] = Pk
 
         if save:
             self._save_results(file_dsc, "matter", pk)

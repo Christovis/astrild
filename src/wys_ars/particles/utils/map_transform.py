@@ -92,13 +92,13 @@ class MapTransform:
     def _compute_divergence(self, value_map: np.ndarray) -> np.ndarray:
         """ Compute vector divergence field, nabla^iv_i """
         dx_vx = np.gradient(
-                value_map[:,:,:,0], 1/self.sim.npar, axis=0, edge_order=2,
+                value_map[:,:,:,0], 1/self.sim.boxsize, axis=0, edge_order=2,
         )
         dy_vy = np.gradient(
-                value_map[:,:,:,1], 1/self.sim.npar, axis=1, edge_order=2,
+                value_map[:,:,:,1], 1/self.sim.boxsize, axis=1, edge_order=2,
         )
         dz_vz = np.gradient(
-                value_map[:,:,:,2], 1/self.sim.npar, axis=2, edge_order=2,
+                value_map[:,:,:,2], 1/self.sim.boxsize, axis=2, edge_order=2,
         )
         div_v = (dx_vx + dy_vy + dz_vz)
         return div_v

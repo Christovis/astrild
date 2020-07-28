@@ -18,7 +18,20 @@ from wys_ars.particles.utils import DTFE
 from wys_ars.simulation import Simulation
 
 t1 = time.clock()
-
+dtfe_file_extensions = {
+    "density": "den",
+    "density_a": "a_den",
+    "velocity": "vel",
+    "velocity_a": "a_vel",
+    "divergence": "velDiv",
+    "divergence_a": "a_velDiv",
+    "vorticity": "velVort",
+    "vorticity_a": "a_velVort",
+    "shear": "velShear",
+    "shear_a": "a_velShear",
+    "gradient": "velGrad",
+    "gradient_a": "a_velGrad",
+}
 
 class EcosmogWarning(BaseException):
     pass
@@ -63,7 +76,7 @@ class Ecosmog(Simulation):
         self,
         snap_nrs: Optional[List[int]] = None,
         file_root: str = "snap_",
-        quantity: str = "velocity",
+        quantities: List[str] = ["density_a", "velocity_a", "divergence_a"],
         file_dsc: dict = {"root": "snap_012.", "extension": None},
     ) -> None:
         """
@@ -77,18 +90,15 @@ class Ecosmog(Simulation):
                 Snapshot numbers to analyze
             file_root:
                 Root of files to use
-            quantity:
-                What quantity to process and return
+            quantities:
+                What quantities to process using DTFE. It is recommended to use
+                averaged quantities (thus ending with '_a';
+                for more details see user guide).
             file_dsc:
                 File describtion of files to use for analyzes
 
         Returns:
         """
-        if quantity == "velocity":
-            _file_extension = ".vel"
-        if quantity == "density":
-            _file_extension = ".den"
-
         # filter snapshot numbers
         if snap_nrs:
             assert set(snap_nrs) < set(self.dir_nrs), EcosmogWarning(
@@ -109,15 +119,20 @@ class Ecosmog(Simulation):
             file_in = snap_dir + "/" + file_dsc["root"] + "%i"
             file_out = self.dirs["sim"] + "dtfe_%05d" % snap_nr
             DTFE.estimate_field(
-                quantity, file_in, file_out, self.domain_level,
+                quantities, file_in, file_out, self.domain_level,
             )
-            file_in = file_out + _file_extension
-            directory = file_in.split("/")[:-1]
-            file_name = f"{quantity}_" + file_in.split("/")[-1].split(".")[0] + ".npy"
-            file_out = "/".join(directory) + "/" + file_name
-            value_map = DTFE.binary_to_array(
-                file_in, file_out, save=True, remove_binary=True
-            )
+        
+            for quant in quantities:
+                file_extension = dtfe_file_extensions[quant]
+                file_bin = f"{file_out}.{file_extension}"
+                directory = file_bin.split("/")[:-1]
+                file_name = f"{quant}_%s.npy" % \
+                    file_bin.split("/")[-1].split(".")[0]
+                file_npy = "/".join(directory) + "/" + file_name
+                print("::::::::::::::", file_bin, file_npy)
+                DTFE.binary_to_array(
+                    file_bin, file_npy, save=True, remove_binary=True
+                )
 
 
     def compress_snapshot(

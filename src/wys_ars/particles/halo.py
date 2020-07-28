@@ -250,8 +250,11 @@ class Halos:
         return snapshot[snapshot["num_p"] > nr_particles]
 
 
-    def _sort_statistics(self, statistics: dict) -> list:
-        """ Sort statistics by their required particle resolution """
+    def _sort_statistics(self, statistics: dict) -> List[str]:
+        """
+        Sort statistics by their required particle resolution
+        (low -to-> high).
+        """
         resolutions = np.zeros(len(list(statistics.keys())))
         for idx, (_, stg) in enumerate(statistics.items()):
             resolutions[idx] = int(stg["resolution"])

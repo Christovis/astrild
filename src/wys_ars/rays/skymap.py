@@ -74,9 +74,8 @@ class SkyMap:
             dir_in:
             dir_out:
             sigmas: significance of void signal
-            kernel_width: ;[deg]
-
-        Returns:
+            kernel_width:
+                smoothing kernel;[deg]
         """
         sim = Simulation(dir_in, None, file_dsc, None)
         _file_path = sim.files[file_dsc["root"]][0]
