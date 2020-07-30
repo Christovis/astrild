@@ -184,7 +184,8 @@ class Voids:
             cats:
                 What categorizations to use.
         """
-        if (field_conversion is not None and 
+        if (field_conversion is not None and
+            self.field_conversion is not None and
             field_conversion != self.field_conversion):
             raise VoidsWarning("Contradictory field convergence")
         else:
