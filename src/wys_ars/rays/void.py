@@ -6,6 +6,8 @@ import yaml
 import pandas as pd
 import xarray as xr
 import numpy as np
+from scipy.interpolate import interp1d
+from scipy import integrate
 from astropy import units as u
 
 from wys_ars.rays.utils import object_selection
@@ -26,8 +28,17 @@ class Voids:
     Class to manage void finders such as tunnels, svf, and watershed.
 
     Attributes:
+        dataset_file:
+        data:
+        finder_spec:
+        skymap_dsc:
 
     Methods:
+        filter_size:
+        filter_sigma:
+        filter_snapshot:
+        get_profiles:
+        get_profile_stats:
     """
 
     def __init__(
@@ -97,9 +108,7 @@ class Voids:
                 lc_nr,
             )
             data = pd.read_hdf(fname, key="df")
-            finder_spec = {
-                "name": finder,
-                "sigmas": {
+            finder_spec = { "name": finder, "sigmas": {
                     "name": "void_min_den",
                     "values": np.linspace(
                         data["void_min_den"].min(),
@@ -128,7 +137,8 @@ class Voids:
         radii_max: float,
         nr_rad_bins: int,
         save: bool = False,
-        dir_out: str = None,
+        field_conversion: Optional[str] = None,
+        dir_out: Optional[str] = None,
     ) -> None:
         """
         Find the profile of voids on wys_ars.rays.SkyMap
@@ -141,9 +151,11 @@ class Voids:
 
         Returns:
         """
+        self.field_conversion = field_conversion
         _skymap = self._read_skymap(self.skymap_dsc["file"])
-        # center map on zero
-        _skymap -= np.mean(_skymap)
+        if self.field_conversion is "normalize":
+            # center map on zero
+            _skymap -= np.mean(_skymap)
 
         if self.finder_spec["name"] == "tunnels":
             self.data = self._trim_edges(
@@ -155,15 +167,15 @@ class Voids:
             + f"{self.finder_spec['name']} voids"
         )
         self.profiles = Profiles2D.from_map(
-            self.data, _skymap, radii_max, nr_rad_bins,
+            self.data, _skymap, radii_max, nr_rad_bins, field_conversion,
         )
-        #if save:
 
     def get_profile_stats(
         self,
         cats: List[str],
-        save: bool = False,
+        field_conversion: Optional[str] = None,
         dir_out: str = None,
+        save: bool = False,
     ) -> None:
         """
         Get profile statistics: mean, 16% and 84% of un- or categorized voids.
@@ -172,6 +184,12 @@ class Voids:
             cats:
                 What categorizations to use.
         """
+        if (field_conversion is not None and 
+            field_conversion != self.field_conversion):
+            raise VoidsWarning("Contradictory field convergence")
+        else:
+            self.field_conversion = field_conversion
+        
         # initialize result arrays
         cat_per_cats = [len(np.unique(self.data[cat].values)) for cat in cats]
         cats_dict = {cat:np.unique(self.data[cat].values) for idx, cat in enumerate(cats)}
@@ -194,6 +212,10 @@ class Voids:
                 self.profiles["radii"].max(),
                 len(self.profiles["radii"]),
             )
+            if self.field_conversion == 'tangential_shear':
+                _mean[ss, :] = self._compute_tangential_shear(
+                    self.profiles["radii"], _mean[ss, :],
+                )
             # apply bootstrap to get errors
             error = Profiles2D.bootstrapping(
                 self.profiles["values"][_void_in_cat.index.values, :],
@@ -228,7 +250,10 @@ class Voids:
         )
         if save:
             dir_out = '/'.join(self.dataset_file.split("/")[:-1])
-            file_name = ''.join(self.dataset_file.split("/")[-1].split(".")[:-1])
+            if self.field_conversion is None:
+                self.field_conversion = ''
+            file_name = self.field_conversion + '_' + \
+                ''.join(self.dataset_file.split("/")[-1].split(".")[:-1])
             print(f"Save profile statistics in -> {dir_out}/profile_{file_name}.nc")
             ds.to_netcdf(f"{dir_out}/profile_{file_name}.nc")
 
@@ -315,6 +340,24 @@ class Voids:
         self.data = object_selection.categorize_sizes(
             self.data, "log", bins, min_obj_nr
         )
+
+    def _compute_tangential_shear(
+        self, rad: np.array, prof: np.array,
+    ) -> np.array:
+        """
+        Compute the tangential shear profile for a given convergence profile.
+
+        Args:
+        """
+        def _integrand(r):
+            return 2 * np.pi * r * kappa_r(r)
+
+        kappa_r = interp1d(rad, prof, fill_value='extrapolate')
+        shear = np.zeros(len(rad))
+        for l in range(len(rad)):
+            _val = integrate.quad(_integrand, 0, rad[l])[0] 
+            shear[l] = _val / (np.pi * rad[l]**2) - prof[l]
+        return shear
 
 
 def init_voids(ff, args):

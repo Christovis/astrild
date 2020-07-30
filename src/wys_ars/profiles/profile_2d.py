@@ -12,24 +12,30 @@ def from_map(
     skymap: np.ndarray,
     extend: float,
     nr_profile_bins: int,
+    field_conversion: str,
 ) -> dict:
     """
     Generate profiles for a list of objects [peaks, voids].
 
     Requires the:
-    - convergance map from which the voids are generated,
-    - void radii,
-    - the cut off (extend(float) - in units of void radii),
-    - annulus thickiness (units of pixel number),
-    - void centers (x and y seperately)
+        - convergance map from which the voids are generated,
+        - void radii,
+        - the cut off (extend(float) - in units of void radii),
+        - annulus thickiness (units of pixel number),
+        - void centers (x and y seperately)
 
     Args:
-        objects : dict
-        mapp : np.ndarray
-        args : dict
+        objects:
+        skymap:
+            The 2D array that represents the partial sky map (e.g. convergance).
+        extend:
+        nr_profile_bins:
+        field_conversion:
+            E.g. if you want to scale the profile by its mean.
 
     Returns:
-        profiles : np.array
+        profiles:
+            Dictionary of profiles for each oject in objects.
     """
     # round up to make sure all values are included
     profile_radii = np.ceil(objects["rad_pix"].values * extend).astype(int)
@@ -40,21 +46,25 @@ def from_map(
     # Run throug objects
     for idx, row in objects.iterrows():
         profile = profiling(
-            np.ceil(row["rad_pix"] * extend).astype(int),
             int(row["rad_pix"]),
-            int(row["x_pix"]),
-            int(row["y_pix"]),
+            (int(row["x_pix"]), int(row["y_pix"])),
             skymap,
             delta_eta,
             extend,
             nr_profile_bins,
+            field_conversion = field_conversion,
         )
         profiles["values"].append(profile["values"])
     profiles["values"] = np.asarray(profiles["values"])
     profiles["radii"] = profile["radii"]
     return profiles
 
-def to_file(self, ray_z, ray_nrs, finder: str, sigmas, profiles_radii, args):
+def to_file(self, ray_z, ray_nrs, finder: str, sigmas, profiles_radii, args) -> None:
+    """
+    Save file to .nc file using xarray.Dataset.
+
+    Args:
+    """
     ds = xr.Dataset(
         {
             "mean": (["ray_nr", "sigma", "size_bin", "radius"], self.mean),
@@ -81,16 +91,31 @@ def to_file(self, ray_z, ray_nrs, finder: str, sigmas, profiles_radii, args):
 
 
 def profiling(
-    prof_radius: int,
     obj_radius: int,
-    obj_posx: int,
-    obj_posy: int,
+    obj_pos: tuple,
     mapp: np.ndarray,
     delta_eta: float,
     extend: float,
     nr_profile_bins: int,
+    field_conversion: Optional[str] = None,
 ) -> Dict[str, np.array]:
-    """Profile of single object on a 2D scalar map"""
+    """
+    Profile of single object on a 2D map.
+    
+    Args:
+        obj_radius:
+            Radius of object in units of pixels.
+        obj_pos:
+            (x,y)-position of object in units of pixels.
+        mapp:
+        delta_eta:
+            The annulus thickness normalised against ith void radius.
+        extend:
+        nr_profile_bins:
+        field_conversion:
+            E.g. if you want to scale the profile by its mean.
+    """
+    prof_radius = np.ceil(obj_radius * extend).astype(int)
     # distance of every pixel to centre
     pix_x = pix_y = np.arange(-prof_radius, prof_radius)
     pix_xx, pix_yy = np.meshgrid(pix_x, pix_y)
@@ -110,17 +135,24 @@ def profiling(
     # Run through shells
     for pp in range(len(eta)):
         annulus_value[eta[pp]] += mapp[
-            obj_posy + pix_xx[pp], obj_posx + pix_yy[pp],
+            obj_pos[1] + pix_xx[pp], obj_pos[0] + pix_yy[pp],
         ]
 
     profile = {}
-    # Radial bin values
-    profile["values"] = annulus_value / annulus_count
     # Radial bin distance
     r_2 = np.linspace(0, extend, nr_profile_bins + 1)
     r = 0.5 * (r_2[1:] + r_2[:-1])
     profile["radii"] = r
-
+    # Radial bin values
+    if field_conversion is None:
+        profile["values"] = annulus_value / annulus_count
+    elif field_conversion == 'tangential_shear':
+        kappa = annulus_value / annulus_count
+        profile["values"] = np.mean(kappa) - kappa
+    elif field_conversion == 'reduced_shear':
+        kappa = annulus_value / annulus_count
+        gamma_t = np.mean(kappa) - kappa
+        profile["values"] = gamma_t / (1 - kappa)
     return profile
 
 

@@ -15,7 +15,9 @@ class Rockstar:
     def histograms(
         snapshot: pd.DataFrame,
         nbins: int,
+        dimesions: int,
         properties: List[str],
+        base: Optional[str] = None,
     ) -> Dict[str, np.array]:
         """
         Comput the concentration/mass relation.
@@ -23,13 +25,17 @@ class Rockstar:
         Args:
         Returns:
         """
-        hist = {}
-        for prop, limits in properties.items():
-            if isinstance(limits[0], str):
-                limits = tuple([float(ii) for ii in limits])
-            hist[prop] = np.histogram(
-                snapshot[prop].values, bins=nbins, range=limits
-            )[0] / len(snapshot.index)
+        if dimesions == 1:
+            hist = {}
+            for prop, limits in properties.items():
+                if isinstance(limits[0], str):
+                    limits = tuple([float(ii) for ii in limits])
+                hist[prop] = np.histogram(
+                    snapshot[prop].values, bins=nbins, range=limits, density=True,
+                )[0]
+        elif dimesions == 2:
+            #TODO https://stackoverflow.com/questions/57562613/python-earth-mover-distance-of-2d-arrays
+            pass
         return hist
 
     def concentration_mass_rel(

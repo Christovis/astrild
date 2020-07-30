@@ -5,8 +5,23 @@ import numpy as np
 
 from wys_ars.particles.utils.density import readDensityData
 
+dtfe_field_dimensions = {
+    "density": 1,
+    "density_a": 1,
+    "velocity": 3,
+    "velocity_a": 3,
+    "divergence": 1,
+    "divergence_a": 1,
+    "vorticity": 3,
+    "vorticity_a": 3,
+    "shear": 5,
+    "shear_a": 5,
+    "gradient": 9,
+    "gradient_a": 9,
+}
 
-class EcosmogWarning(BaseException):
+
+class DTFEWarning(BaseException):
     pass
 
 
@@ -37,7 +52,7 @@ class DTFE:
         )
 
     def binary_to_array(
-        file_in: str, file_out: str, save: bool = True, remove_binary: bool = True,
+        quantity: str, file_in: str, file_out: str, save: bool = True, remove_binary: bool = True,
     ) -> Union[None, np.ndarray]:
         """
         Args:
@@ -53,10 +68,14 @@ class DTFE:
                 - density field at domain level resolution
         """
         header, value = readDensityData(file_in)
-        if ".vel" in file_in:
+        if dtfe_field_dimensions[quantity] == 3:
             value.shape = header.gridSize[0], header.gridSize[1], header.gridSize[2], 3
-        elif ".den" in file_in:
+        elif dtfe_field_dimensions[quantity] == 1:
             value.shape = header.gridSize[0], header.gridSize[1], header.gridSize[2]
+        else:
+            raise DTFEWarning(
+                f'Dont know how to handle {dtfe_field_dimensions[quantity]} dimensions'
+            )
 
         if remove_binary:
             os.remove(file_in)

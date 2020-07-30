@@ -80,7 +80,7 @@ class Ecosmog(Simulation):
         file_dsc: dict = {"root": "snap_012.", "extension": None},
     ) -> None:
         """
-        Return density and velocity estimates on a fixed (n x n)-grid using the
+        Save density and velocity estimates on a fixed (n x n)-grid using the
         Delaunay Tessellation Field Estimator.
         User Guide:
             www.astro.rug.nl/~voronoi/DTFE/download/DTFE_user_guide_1.0.pdf
@@ -96,8 +96,6 @@ class Ecosmog(Simulation):
                 for more details see user guide).
             file_dsc:
                 File describtion of files to use for analyzes
-
-        Returns:
         """
         # filter snapshot numbers
         if snap_nrs:
@@ -129,9 +127,8 @@ class Ecosmog(Simulation):
                 file_name = f"{quant}_%s.npy" % \
                     file_bin.split("/")[-1].split(".")[0]
                 file_npy = "/".join(directory) + "/" + file_name
-                print("::::::::::::::", file_bin, file_npy)
                 DTFE.binary_to_array(
-                    file_bin, file_npy, save=True, remove_binary=True
+                    quant, file_bin, file_npy, save=True, remove_binary=True
                 )
 
 

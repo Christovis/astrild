@@ -15,6 +15,9 @@ from wys_ars.rays.voids.tunnels import textFile
 
 this_file_path = Path(__file__).parent.absolute()
 
+class TunnelsFinderWarning(BaseException):
+    pass
+
 
 class TunnelsFinder:
     """
@@ -43,7 +46,7 @@ class TunnelsFinder:
         self.npix = npix
         self.k_width = kernel_width
 
-    def find_peaks(self):
+    def find_peaks(self, field_conversion: str) -> None:
         """
         Find peaks on convergence map. It is assumed that the convergence maps
         were created with wys_ars.rays.visuals.map and have appropriate
@@ -54,30 +57,26 @@ class TunnelsFinder:
         """
         #TODO substract average before finding peaks
         Convmap = ConvergenceMap.load(self.file_in)
+        
+        if field_conversion == "normalize":
+            Convmap.data -= np.mean(Convmap.data)
+
         # define peak thresholds
         thresholds = np.arange(
             Convmap.data.min(),
             Convmap.data.max(),
             (Convmap.data.max() - Convmap.data.min()) / 100,
         )
-        kappa, pos = Convmap.locatePeaks(thresholds)
-        assert len(kappa) != 0
+        _peaks = {}
+        _peaks["kappa"], _peaks["pos"] = Convmap.locatePeaks(thresholds)
+        _peaks["kappa"], _peaks["pos"] = self._remove_peaks_crossing_edge(**_peaks)
+        assert len(_peaks["kappa"]) != 0, "No peaks"
 
         # find significance of peaks
-        sigma = self._peak_sigma(Convmap, kappa)
+        _peaks["snr"] = self._signal_to_noise_ratio(Convmap, _peaks["kappa"])
+        self.peaks = _peaks
 
-        # delete .fits file to free memory
-        # os.remove(mapfile_fits)
-
-        # remove peaks too close to edge
-        self.peaks_orig = {}
-        (
-            self.peaks_orig["kappa"],
-            self.peaks_orig["sigma"],
-            self.peaks_orig["pos"],
-        ) = self._clean_peaks_map(kappa, sigma, pos)
-
-    def _peak_sigma(
+    def _signal_to_noise_ratio(
         self,
         Convmap: ConvergenceMap,
         kappa: np.ndarray,
@@ -90,26 +89,24 @@ class TunnelsFinder:
         _kappa_mean = np.mean(Convmap.data)
         _kappa_std = Convmap.std()
         # Express the convergence as a signal-to-noise ratio
-        sigma = (kappa - _kappa_mean) / _kappa_std
-        return sigma
+        #snr = (kappa - _kappa_mean) / _kappa_std
+        snr = (kappa) / 0.007
+        return snr
 
-    def _clean_peaks_map(
+    def _remove_peaks_crossing_edge(
         self,
         kappa: np.ndarray,
-        nu: np.ndarray,
         pos: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Remove peaks within 1 smoothing length from map edges
         
         Args:
             kappa:
-            nu:
             pos:
 
         Returns:
             kappa:
-            nu:
             pos:
         """
         pixlen = self.opening_angle / self.npix  #[deg]
@@ -121,30 +118,29 @@ class TunnelsFinder:
             np.logical_and(x <= self.npix - 1 - bufferlen, x >= bufferlen),
             np.logical_and(y <= self.npix - 1 - bufferlen, y >= bufferlen),
         )
-        pos = pos[indx, :]
         kappa = kappa[indx]
-        nu = nu[indx]
+        pos = pos[indx, :]
         print("Peaks trimmed %d away and have % left" % (len(indx), len(kappa)))
-        return kappa, nu, pos
+        return kappa, pos
 
-    def find_voids(self, dir_out:str, sigma: float) -> None:
+    def find_voids(self, dir_out:str, snr: float) -> None:
         """
         analyze convergence map for different peak heights
         Args:
-            sigma: signifance of void traces, in this case peaks on convergence map.
+            snr: signifance of void traces, in this case peaks on convergence map.
         Returns:
             Creates pd.DataFrame for voids and peaks
         """
-        print("\n Start analyzes for nu=%f" % sigma)
-        sigma_label = str(sigma).replace(".", "p")[:]
+        print("\n Start analyzes for nu=%f" % snr)
+        snr_label = str(snr).replace(".", "p")[:]
 
         # filter sigma
-        indx_sigma = self.peaks_orig["sigma"] > sigma
-        pos_tmp = self.peaks_orig["pos"][indx_sigma, :]
-        nu_tmp = self.peaks_orig["sigma"][indx_sigma]
+        idx = self.peaks["snr"] > snr
+        pos_tmp = self.peaks["pos"][idx, :]
+        nu_tmp = self.peaks["snr"][idx]
 
         # prepare .txt file for Marius's void finder
-        file_peaks_txt = f"{dir_out}peaks_in_kappa2_nu{sigma_label}.txt"
+        file_peaks_txt = f"{dir_out}peaks_in_kappa2_nu{snr_label}.txt"
         _peaks2txt(nu_tmp, pos_tmp, file_peaks_txt)
 
         # store peaks in pd.DataFrame
@@ -153,15 +149,14 @@ class TunnelsFinder:
             "x_pix": np.rint(pos_tmp[:, 0] * self.npix / self.opening_angle).astype(int),
             "y_deg": pos_tmp[:, 1],
             "y_pix": np.rint(pos_tmp[:, 1] * self.npix / self.opening_angle).astype(int),
-            "sigma": sigma,
+            "sigma": snr,
         }
-        peaks_df = pd.DataFrame(data=peak_dir)
 
         # prepare .bin file for Marius's void finder
         file_peaks_bin = file_peaks_txt.replace(".txt", ".bin")
         _txt2bin(file_peaks_txt, file_peaks_bin, self.opening_angle)
 
-        file_voids_bin = f"{dir_out}voids_in_kappa2_nu{sigma_label}.bin"
+        file_voids_bin = f"{dir_out}voids_in_kappa2_nu{snr_label}.bin"
         os.system(
             f"{this_file_path}/tunnels/void_finder_spherical_2D " + \
             f"{file_peaks_bin} {file_voids_bin} -l 1. -a 0.2 -x 0 -y 1;"
@@ -169,14 +164,17 @@ class TunnelsFinder:
 
         # read void results and prepare pd.DataFrame for storage
         self.voids = _bin2df(
-            file_voids_bin, sigma, self.npix, self.opening_angle
+            file_voids_bin, snr, self.npix, self.opening_angle
         )
         os.remove(file_voids_bin)
         os.remove(file_peaks_bin)
         os.remove(file_peaks_txt)
 
         # adding radii to peaks
-        self.peaks = peak.set_radii(peaks_df, self.voids, self.npix, self.opening_angle)
+        peaks_df = pd.DataFrame(data=peak_dir)
+        self.filtered_peaks = peak.set_radii(
+            peaks_df, self.voids, self.npix, self.opening_angle,
+        )
 
 
 def _bin2df(file_in, sigma, npix, opening_angle) -> pd.DataFrame:
