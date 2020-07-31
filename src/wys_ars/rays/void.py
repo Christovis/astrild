@@ -136,6 +136,8 @@ class Voids:
         self,
         radii_max: float,
         nr_rad_bins: int,
+        skymap_file: Optional[str] = None,
+        skymap: Optional[np.ndarray] = None,
         save: bool = False,
         field_conversion: Optional[str] = None,
         dir_out: Optional[str] = None,
@@ -151,8 +153,16 @@ class Voids:
 
         Returns:
         """
+        # get skymap data from which to find profiles
         self.field_conversion = field_conversion
-        _skymap = self._read_skymap(self.skymap_dsc["file"])
+        if skymap is None:
+            if skymap_file is None:
+                _skymap = self._read_skymap(self.skymap_dsc["file"])
+            else:
+                _skymap = self._read_skymap(skymap_file)
+        else:
+            _skymap = skymap
+
         if self.field_conversion is "normalize":
             # center map on zero
             _skymap -= np.mean(_skymap)
@@ -188,7 +198,7 @@ class Voids:
             self.field_conversion is not None and
             field_conversion != self.field_conversion):
             raise VoidsWarning("Contradictory field convergence")
-        else:
+        elif field_conversion is not None:
             self.field_conversion = field_conversion
         
         # initialize result arrays

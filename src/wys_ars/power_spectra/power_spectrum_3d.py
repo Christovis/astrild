@@ -7,14 +7,15 @@ import pandas as pd
 
 from nbodykit.lab import *
 
+from wys_ars import io as IO
 from wys_ars.simulation import Simulation
 
 
-class PowerSpectrumWarning(BaseException):
+class PowerSpectrum3DWarning(BaseException):
     pass
 
 
-class PowerSpectrum:
+class PowerSpectrum3D:
     """
     Attributes:
         sim_type:
@@ -31,40 +32,36 @@ class PowerSpectrum:
 
     def compute(
         self,
-        quantity: Optional[str] = None,
+        quantity: str,
         snap_nrs: Optional[List[int]] = None,
-        file_dsc: Dict[str, str] = {"root": "dtfe", "extension": "npy"},
-        dir_in: Optional[str] = None,
+        file_dsc: Optional[Dict[str, str]] = None,
         dir_out: Optional[str] = None,
         save: bool = True,
-    ) -> Union[None, Dict[str, dict]]:
+    ) -> Union[None, dict]:
         """
         Power spectrum of particle quanities.
         
         Args:
-            quantity: [rho, phi, dphi/dt, chi, velocity]
+            quantity: [rho, phi, dphi/dt, chi, velocity, convergence, \Delta T]
+            file_dsc: {path: , root: , extention: }
         """
-        if not dir_in:
-            dir_in = self.sim.dirs["sim"]
         if snap_nrs:
             assert set(snap_nrs) < set(self.sim.dir_nrs), PowerSpectrumWarning(
                 f"Some of the snapshots {snap_nrs} do not exist" + \
                 f"in:\n{self.sim.dir_nrs}"
             )
             _file_paths = self.sim.get_file_paths(
-                file_dsc, dir_in, "max"
+                file_dsc, file_dsc["path"], "max"
             )
         else:
-            snap_nrs = self.sim.get_file_nrs(file_dsc, dir_in, "max")
-            _file_paths = self.sim.get_file_paths(file_dsc, dir_in, "max")
+            snap_nrs = self.sim.get_file_nrs(file_dsc.pop("path"), file_dsc["path"], "max")
+            _file_paths = self.sim.get_file_paths(file_dsc.pop("path"), file_dsc["path"], "max")
 
         pk = {"k": {}, "P": {}}
         for snap_nr, file_path in zip(snap_nrs, _file_paths):
             value_map = self._read_data(file_path, quantity)
             if len(value_map.shape) == 3:
                 k, Pk = self._power_spectrum_3d(value_map)
-            elif len(value_map.shape) == 2:
-                k, Pk = self._power_spectrum_2d(value_map)
             else:
                 raise PowerSpectrumWarning(
                     f"{len(value_map.shape)}D is not supported :-("
@@ -140,9 +137,6 @@ class PowerSpectrum:
         print("Pk wavenumber ------>", k.min(), k.max())
         return k, Pk
 
-    def _power_spectrum_2d():
-        raise PowerSpectrumWarning("This class method is not implemented yet")
-
     def _save_results(self, file_dsc: Dict[str, str], quantity: str, pk: dict) -> None:
         """ 
         Save results each power spectrum of each simulations snapshot
@@ -156,8 +150,7 @@ class PowerSpectrum:
         """
         _columns = list(pk["k"].keys())
         df = pd.DataFrame(data=pk["P"], index=pk["k"][_columns[0]],)
-        file_out = self.sim.dirs["out"] + "pk_%s.h5" % (quantity)
-        if os.path.exists(file_out):
-            os.remove(file_out)
-        print(f"Saving results to -> {file_out}")
-        df.to_hdf(file_out, key="df", mode="w")
+        filename = self.sim.dirs["out"] + "pk_%s.h5" % (quantity)
+        IO._remove_existing_file(filename)
+        print(f"Saving results to -> {filename}")
+        df.to_hdf(filename, key="df", mode="w")

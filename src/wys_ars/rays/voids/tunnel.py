@@ -10,6 +10,7 @@ from astropy import units as un
 from lenstools import ConvergenceMap
 
 from wys_ars.rays import peak
+from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.voids.tunnels import halo
 from wys_ars.rays.voids.tunnels import textFile
 
@@ -25,28 +26,25 @@ class TunnelsFinder:
     Source: arxiv:1710.01730
 
     Attributes:
-        file_in:
-        opening_angle:
-        npix:
-        kernel_width:
-            smoothing kernel; [deg]
-
+        skymap:
+            SkyMap object
     Methods:
+        find_peaks:
+            Identify traces which are used to find voids.
+        find_voids:
+            Identify voids.
     """
 
-    def __init__(
-        self,
-        file_in: str,
-        opening_angle: float,
-        npix: float,
-        kernel_width: float,
-    ):
-        self.file_in = file_in
-        self.opening_angle = opening_angle
-        self.npix = npix
-        self.k_width = kernel_width
+    def __init__(self, skymap: Type[SkyMap]):
+        self.skymap = skymap
 
-    def find_peaks(self, field_conversion: str) -> None:
+    def find_peaks(
+        self,
+        on: str,
+        field_conversion: str,
+        thresholds_dsc: dict = {"on": "orig", "nbins": 100},
+        snr_sigma: Optional[float] = None,
+    ) -> None:
         """
         Find peaks on convergence map. It is assumed that the convergence maps
         were created with wys_ars.rays.visuals.map and have appropriate
@@ -55,42 +53,52 @@ class TunnelsFinder:
         Args:
         Returns:
         """
-        #TODO substract average before finding peaks
-        Convmap = ConvergenceMap.load(self.file_in)
-        
         if field_conversion == "normalize":
-            Convmap.data -= np.mean(Convmap.data)
+            _map = self.skymap.data[on] - np.mean(self.skymap.data[on])
+        else:
+            _map = self.skymap.data[on]
 
-        # define peak thresholds
-        thresholds = np.arange(
-            Convmap.data.min(),
-            Convmap.data.max(),
-            (Convmap.data.max() - Convmap.data.min()) / 100,
-        )
+        thresholds = self._get_convergence_thresholds(**thresholds_dsc)
+
+        _map = ConvergenceMap(data=_map, angle=self.skymap.opening_angle*un.deg)
         _peaks = {}
-        _peaks["kappa"], _peaks["pos"] = Convmap.locatePeaks(thresholds)
+        _peaks["kappa"], _peaks["pos"] = _map.locatePeaks(thresholds)
         _peaks["kappa"], _peaks["pos"] = self._remove_peaks_crossing_edge(**_peaks)
         assert len(_peaks["kappa"]) != 0, "No peaks"
 
         # find significance of peaks
-        _peaks["snr"] = self._signal_to_noise_ratio(Convmap, _peaks["kappa"])
+        _peaks["snr"] = self._signal_to_noise_ratio(_peaks["kappa"], _map.data, snr_sigma)
         self.peaks = _peaks
+
+    def _get_convergence_thresholds(
+        self, on: str = "orig", nbins: int = 100) -> np.array:
+        """
+        Define thresholds for lenstools to find peaks on convergence map.
+        Important to do this on un-smoothed and with no-gsn skymap.
+        """
+        return np.arange(
+            np.min(self.skymap.data[on]),
+            np.max(self.skymap.data[on]),
+            (np.max(self.skymap.data[on]) - np.min(self.skymap.data[on])) / nbins,
+        )
 
     def _signal_to_noise_ratio(
         self,
-        Convmap: ConvergenceMap,
-        kappa: np.ndarray,
+        peak_values: np.ndarray,
+        map_values: np.ndarray,
+        sigma: Optional[float] = None,
     ) -> np.ndarray:
         """
         Assess signifance of peaks and remove peaks suffereing edge effects
 
         Args:
         """
-        _kappa_mean = np.mean(Convmap.data)
-        _kappa_std = Convmap.std()
-        # Express the convergence as a signal-to-noise ratio
-        #snr = (kappa - _kappa_mean) / _kappa_std
-        snr = (kappa) / 0.007
+        if sigma is None:
+            _kappa_mean = np.mean(map_values)
+            _kappa_std = np.std(map_values)
+            snr = (peak_values - _kappa_mean) / _kappa_std
+        else:
+            snr = (peak_values) / sigma
         return snr
 
     def _remove_peaks_crossing_edge(
@@ -109,21 +117,24 @@ class TunnelsFinder:
             kappa:
             pos:
         """
-        pixlen = self.opening_angle / self.npix  #[deg]
-        bufferlen = np.ceil(self.k_width / (60 * pixlen))  # length of buffer zone
+        pixlen = self.skymap.opening_angle / self.skymap.npix  #[deg]
+        bufferlen = np.ceil(self.skymap.smoothing_length / (60 * pixlen))  # length of buffer zone
         # convert degrees to pixel number
-        x = pos[:, 0].value * self.npix/ self.opening_angle
-        y = pos[:, 1].value * self.npix / self.opening_angle
+        x = pos[:, 0].value * self.skymap.npix/ self.skymap.opening_angle
+        y = pos[:, 1].value * self.skymap.npix / self.skymap.opening_angle
         indx = np.logical_and(
-            np.logical_and(x <= self.npix - 1 - bufferlen, x >= bufferlen),
-            np.logical_and(y <= self.npix - 1 - bufferlen, y >= bufferlen),
+            np.logical_and(x <= self.skymap.npix - 1 - bufferlen, x >= bufferlen),
+            np.logical_and(y <= self.skymap.npix - 1 - bufferlen, y >= bufferlen),
         )
         kappa = kappa[indx]
         pos = pos[indx, :]
         print("Peaks trimmed %d away and have % left" % (len(indx), len(kappa)))
         return kappa, pos
 
-    def find_voids(self, dir_out:str, snr: float) -> None:
+
+    def find_voids(
+        self, snrs: List[float], rtn: bool = False,
+    ) -> None:
         """
         analyze convergence map for different peak heights
         Args:
@@ -131,50 +142,89 @@ class TunnelsFinder:
         Returns:
             Creates pd.DataFrame for voids and peaks
         """
-        print("\n Start analyzes for nu=%f" % snr)
-        snr_label = str(snr).replace(".", "p")[:]
+        dir_out = "/".join(self.skymap.map_file.split("/")[:-1])
+        first = True
+        for snr in snrs:
+            print("\n Start analyzes for nu=%f" % snr)
+            snr_label = str(snr).replace(".", "p")[:]
 
-        # filter sigma
-        idx = self.peaks["snr"] > snr
-        pos_tmp = self.peaks["pos"][idx, :]
-        nu_tmp = self.peaks["snr"][idx]
+            # filter sigma
+            idx = self.peaks["snr"] > snr
+            pos_tmp = self.peaks["pos"][idx, :]
+            nu_tmp = self.peaks["snr"][idx]
 
-        # prepare .txt file for Marius's void finder
-        file_peaks_txt = f"{dir_out}peaks_in_kappa2_nu{snr_label}.txt"
-        _peaks2txt(nu_tmp, pos_tmp, file_peaks_txt)
+            # prepare .txt file for Marius's void finder
+            file_peaks_txt = f"{dir_out}peaks_in_kappa2_nu{snr_label}.txt"
+            _peaks2txt(nu_tmp, pos_tmp, file_peaks_txt)
 
-        # store peaks in pd.DataFrame
-        peak_dir = {
-            "x_deg": pos_tmp[:, 0],
-            "x_pix": np.rint(pos_tmp[:, 0] * self.npix / self.opening_angle).astype(int),
-            "y_deg": pos_tmp[:, 1],
-            "y_pix": np.rint(pos_tmp[:, 1] * self.npix / self.opening_angle).astype(int),
-            "sigma": snr,
-        }
+            # store peaks in pd.DataFrame
+            peak_dir = {
+                "x_deg": pos_tmp[:, 0],
+                "x_pix": np.rint(
+                    pos_tmp[:, 0] * self.skymap.npix / self.skymap.opening_angle
+                ).astype(int),
+                "y_deg": pos_tmp[:, 1],
+                "y_pix": np.rint(
+                    pos_tmp[:, 1] * self.skymap.npix / self.skymap.opening_angle
+                ).astype(int),
+                "sigma": snr,
+            }
 
-        # prepare .bin file for Marius's void finder
-        file_peaks_bin = file_peaks_txt.replace(".txt", ".bin")
-        _txt2bin(file_peaks_txt, file_peaks_bin, self.opening_angle)
+            # prepare .bin file for Marius's void finder
+            file_peaks_bin = file_peaks_txt.replace(".txt", ".bin")
+            _txt2bin(file_peaks_txt, file_peaks_bin, self.skymap.opening_angle)
 
-        file_voids_bin = f"{dir_out}voids_in_kappa2_nu{snr_label}.bin"
-        os.system(
-            f"{this_file_path}/tunnels/void_finder_spherical_2D " + \
-            f"{file_peaks_bin} {file_voids_bin} -l 1. -a 0.2 -x 0 -y 1;"
+            file_voids_bin = f"{dir_out}voids_in_kappa2_nu{snr_label}.bin"
+            os.system(
+                f"{this_file_path}/tunnels/void_finder_spherical_2D " + \
+                f"{file_peaks_bin} {file_voids_bin} -l 1. -a 0.2 -x 0 -y 1;"
+            )
+
+            # read void results and prepare pd.DataFrame for storage
+            self.voids = _bin2df(
+                file_voids_bin, snr, self.skymap.npix, self.skymap.opening_angle
+            )
+            os.remove(file_voids_bin)
+            os.remove(file_peaks_bin)
+            os.remove(file_peaks_txt)
+
+            # adding radii to peaks
+            peaks_df = pd.DataFrame(data=peak_dir)
+            self.filtered_peaks = peak.set_radii(
+                peaks_df, self.voids, self.skymap.npix, self.skymap.opening_angle,
+            )
+
+            if first is True:
+                voids_df_sum = self.voids
+                peaks_df_sum = self.filtered_peaks
+                first = False
+            else:
+                voids_df_sum = voids_df_sum.append(
+                    self.voids, ignore_index=True
+                )
+                peaks_df_sum = peaks_df_sum.append(
+                    self.filtered_peaks, ignore_index=True
+                )
+        if rtn:
+            return peaks_df_sum, voids_df_sum
+        else:
+            self.peaks_df = peaks_df_sum
+            self.voids_df = voids_df_sum
+
+
+    def to_file(self, dir_out: str) -> None:
+        filename = self._create_filename(obj="voids", dir_out=dir_out)
+        self.voids_df.to_hdf(filename, key="df")
+        filename = self._create_filename(obj="peaks", dir_out=dir_out)
+        self.peaks_df.to_hdf(filename, key="df")
+        #IO.save_peaks_and_voids(filename)
+
+    def _create_filename(self, obj: str, dir_out: str) -> str:
+        _filename = self.skymap._create_filename(
+            self.skymap.map_file, self.skymap.quantity, extension="_"
         )
-
-        # read void results and prepare pd.DataFrame for storage
-        self.voids = _bin2df(
-            file_voids_bin, snr, self.npix, self.opening_angle
-        )
-        os.remove(file_voids_bin)
-        os.remove(file_peaks_bin)
-        os.remove(file_peaks_txt)
-
-        # adding radii to peaks
-        peaks_df = pd.DataFrame(data=peak_dir)
-        self.filtered_peaks = peak.set_radii(
-            peaks_df, self.voids, self.npix, self.opening_angle,
-        )
+        _filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
+        return f"{dir_out}{obj}_{_filename}.h5"
 
 
 def _bin2df(file_in, sigma, npix, opening_angle) -> pd.DataFrame:

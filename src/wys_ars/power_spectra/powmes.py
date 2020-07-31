@@ -12,14 +12,14 @@ from astropy.cosmology import LambdaCDM
 from nbodykit.lab import *
 
 from wys_ars.simulation import Simulation
-from wys_ars.power_spectra.power_spectrum import PowerSpectrum
+from .power_spectrum_3d import PowerSpectrum3D
 
 
 class PowMesWarning(BaseException):
     pass
 
 
-class PowMes(PowerSpectrum):
+class PowMes(PowerSpectrum3D):
     """
     POWMES: Accurate estimators of power spectra N-body simulations
     Source: https://arxiv.org/pdf/0811.0313.pdf
@@ -33,8 +33,8 @@ class PowMes(PowerSpectrum):
         super().__init__(sim_type, simulation)
 
 
-    def compute(self):
-        raise PowMesWarning("This method is not yet implemented for PowMes.")
+    #def compute(self):
+    #    raise PowMesWarning("This method is not yet implemented for PowMes.")
 
 
     def read_file(

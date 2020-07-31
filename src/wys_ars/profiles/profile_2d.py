@@ -144,7 +144,7 @@ def profiling(
     r = 0.5 * (r_2[1:] + r_2[:-1])
     profile["radii"] = r
     # Radial bin values
-    if field_conversion is None:
+    if field_conversion in [None, "normalize"]:
         profile["values"] = annulus_value / annulus_count
     elif field_conversion == 'tangential_shear':
         kappa = annulus_value / annulus_count
