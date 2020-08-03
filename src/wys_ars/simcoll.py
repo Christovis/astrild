@@ -235,6 +235,7 @@ class SimulationCollection:
         # loop over simulations in collection
         first = True
         for sim_idx, sim_name in enumerate(self.sim.keys()):
+            print(sim_name)
             _sim = self.sim[sim_name]
             box_nr = int(re.findall(r"\d+", sim_name)[0])
             if box_nr not in list(box_ray_nrs.keys()):
@@ -389,5 +390,5 @@ class SimulationCollection:
             )
         if not os.path.isdir(dir_out):
             Path(dir_out).mkdir(parents=True, exist_ok=True)
-        print("Save in %s" % fout)
+        print(f"Save in -> {fout}")
         ray_df_sum.to_hdf(fout, key="df", mode="w")

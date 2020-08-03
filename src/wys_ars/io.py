@@ -32,9 +32,9 @@ def save_skymap(
     _remove_existing_file(filename)
     print("Save in:\n   %s" % filename)
     if isinstance(data, np.ndarray):
-        np.save(filename, map_out)
+        np.save(filename, data)
     elif isinstance(data, astropy.io.fits.hdu.image.PrimaryHDU):
-        map_out.writeto(filename)
+        data.writeto(filename)
 
 def _remove_existing_file(filename) -> None:
     if os.path.exists(filename):

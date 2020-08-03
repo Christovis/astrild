@@ -4,12 +4,13 @@ from typing import Dict, List, Optional, Tuple, Type
 
 import pandas as pd
 import numpy as np
+from scipy.spatial import cKDTree
 
 from astropy.io import fits
 from astropy import units as un
 from lenstools import ConvergenceMap
 
-from wys_ars.rays import peak
+#from wys_ars.rays import peak as Peaks
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.voids.tunnels import halo
 from wys_ars.rays.voids.tunnels import textFile
@@ -154,7 +155,7 @@ class TunnelsFinder:
             nu_tmp = self.peaks["snr"][idx]
 
             # prepare .txt file for Marius's void finder
-            file_peaks_txt = f"{dir_out}peaks_in_kappa2_nu{snr_label}.txt"
+            file_peaks_txt = f"{dir_out}/peaks_in_kappa2_nu{snr_label}.txt"
             _peaks2txt(nu_tmp, pos_tmp, file_peaks_txt)
 
             # store peaks in pd.DataFrame
@@ -174,7 +175,7 @@ class TunnelsFinder:
             file_peaks_bin = file_peaks_txt.replace(".txt", ".bin")
             _txt2bin(file_peaks_txt, file_peaks_bin, self.skymap.opening_angle)
 
-            file_voids_bin = f"{dir_out}voids_in_kappa2_nu{snr_label}.bin"
+            file_voids_bin = f"{dir_out}/voids_in_kappa2_nu{snr_label}.bin"
             os.system(
                 f"{this_file_path}/tunnels/void_finder_spherical_2D " + \
                 f"{file_peaks_bin} {file_voids_bin} -l 1. -a 0.2 -x 0 -y 1;"
@@ -190,8 +191,8 @@ class TunnelsFinder:
 
             # adding radii to peaks
             peaks_df = pd.DataFrame(data=peak_dir)
-            self.filtered_peaks = peak.set_radii(
-                peaks_df, self.voids, self.skymap.npix, self.skymap.opening_angle,
+            self.filtered_peaks = self.set_peak_radii(
+                peaks_df, self.voids, self.skymap.npix, self.skymap.opening_angle
             )
 
             if first is True:
@@ -212,6 +213,51 @@ class TunnelsFinder:
             self.voids_df = voids_df_sum
 
 
+    def set_peak_radii(
+        self,
+        peaks: pd.DataFrame,
+        voids: pd.DataFrame,
+        npix,
+        opening_angle,
+    ) -> pd.DataFrame:
+        """
+        Args:
+        Returns:
+        """
+        # convert from pd.DataFrame to np.ndarray
+        peaks_pos = peaks[["x_deg", "y_deg"]].values
+
+        # convert from dict to np.ndarray
+        if voids.__class__ is dict:
+            voids_pos = np.concatenate(
+                (
+                    voids["pos_x"]["deg"].reshape((len(voids["pos_x"]["deg"]), 1)),
+                    voids["pos_y"]["deg"].reshape((len(voids["pos_y"]["deg"]), 1)),
+                ),
+                axis=1,
+            )
+        elif voids.__class__ is pd.core.frame.DataFrame:
+            voids_pos = np.concatenate(
+                (
+                    voids["x_deg"].values.reshape((len(voids["x_deg"].values), 1)),
+                    voids["y_deg"].values.reshape((len(voids["y_deg"].values), 1)),
+                ),
+                axis=1,
+            )
+
+        # build tree of voids
+        tree = cKDTree(voids_pos)
+        # find nearest void for each peak
+        distances, edges = tree.query(peaks_pos, k=1)
+
+        peaks["rad_deg"] = pd.Series(distances)
+        peaks["rad_pix"] = peaks["rad_deg"].apply(
+            lambda x: np.rint(x * (
+                npix / opening_angle
+            )).astype(int)
+        )
+        return peaks
+
     def to_file(self, dir_out: str) -> None:
         filename = self._create_filename(obj="voids", dir_out=dir_out)
         self.voids_df.to_hdf(filename, key="df")
@@ -223,8 +269,9 @@ class TunnelsFinder:
         _filename = self.skymap._create_filename(
             self.skymap.map_file, self.skymap.quantity, extension="_"
         )
-        _filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
-        return f"{dir_out}{obj}_{_filename}.h5"
+        #_filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
+        _filename = ''.join(_filename.split(".")[:-1])
+        return f"{dir_out}/{obj}_{_filename}.h5"
 
 
 def _bin2df(file_in, sigma, npix, opening_angle) -> pd.DataFrame:

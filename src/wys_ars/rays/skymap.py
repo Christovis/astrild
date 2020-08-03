@@ -65,7 +65,6 @@ class SkyMap:
         theta: float,
         quantity: str,
         dir_in: str,
-        dir_out: str,
         map_file: Optional[str] = None,
         convert_unit: bool = True,
     ) -> "SkyMap":
@@ -85,11 +84,11 @@ class SkyMap:
             if map_file.split(".")[-1] == "h5":
                 map_df = pd.read_hdf(map_file, key="df")
                 return cls.from_dataframe(
-                    npix, theta, quantity, dir_in, dir_out, map_df, map_file, convert_unit,
+                    npix, theta, quantity, dir_in, map_df, map_file, convert_unit,
                 )
             elif map_file.split(".")[-1] == "npy":
                 map_array = np.load(map_file)
-                dirs = {"sim": dir_in, "out": dir_out}
+                dirs = {"sim": dir_in}
                 return cls.SkyMap(npix, theta, quantity, dirs, map_array, map_file)
         else:
             raise SkyMapWarning('There is no file being pointed at')
@@ -101,7 +100,6 @@ class SkyMap:
         theta: float,
         quantity: str,
         dir_in: str,
-        dir_out: str,
         map_df: pd.DataFrame,
         map_file: str,
         convert_unit: bool = True,
@@ -116,9 +114,10 @@ class SkyMap:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
         """
-        map_df = cls._convert_code_to_phy_units(cls, quantity, map_df)
+        if convert_unit:
+            map_df = cls._convert_code_to_phy_units(cls, quantity, map_df)
         map_array = IO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
-        return cls.from_array(npix, theta, quantity, dir_in, dir_out, map_array, map_file)
+        return cls.from_array(npix, theta, quantity, dir_in, map_array, map_file)
     
     @classmethod
     def from_array(
@@ -127,7 +126,6 @@ class SkyMap:
         theta: float,
         quantity: str,
         dir_in: str,
-        dir_out: str,
         map_array: np.array,
         map_file: str,
     ) -> "SkyMap":
@@ -141,7 +139,7 @@ class SkyMap:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
         """
-        dirs = {"sim": dir_in, "out": dir_out}
+        dirs = {"sim": dir_in}
         return cls(npix, theta, quantity, dirs, map_array, map_file)
     
     def _convert_code_to_phy_units(
@@ -155,7 +153,15 @@ class SkyMap:
         elif quantity in ["isw_rs"]:
             map_df.loc[:, [quantity]] /= c_light ** 3
         return map_df
-    
+   
+    @property
+    def pdf(self) -> None:
+        _pdf = {}
+        _pdf["values"], _pdf["bins"] = np.histogram(
+            self.data["orig"], bins=100, density=True,
+        )
+        return _pdf
+
     def smoothing(
         self,
         kernel_width: float,
@@ -212,7 +218,7 @@ class SkyMap:
                 loc=0, scale=std_pix, size=[self.npix, self.npix],
             )
 
-    def add_galaxy_shape_noise(self,) -> np.ndarray:
+    def add_galaxy_shape_noise(self, on: str = "orig") -> np.ndarray:
         """
         Add GSN on top of skymap.
         
@@ -256,13 +262,14 @@ class SkyMap:
         data.data = map_out
         return data
    
-    def to_file(self, method: str, extension: str) -> None:
+    def to_file(self, dir_out: str, method: str, extension: str) -> None:
         """
         """
+        self.dirs["out"] = dir_out
         filename = self._create_filename(
             self.map_file, self.quantity, extension=extension
         )
-        IO.save_skymap(self.mapp, filename)
+        IO.save_skymap(self.data["orig_gsn_smooth"], dir_out + filename)
 
     def _create_filename(
         self, file_in: str, quantity: str, extension: str,
@@ -285,7 +292,7 @@ class SkyMap:
             ][0]
             file_out[idx] = string
             file_out = "_".join(file_out)
-        return self.dirs["out"] + file_out
+        return file_out
     
     def to_healpix(
         self, ray_nrs: list = None, quantities: list = None, save: bool = True,

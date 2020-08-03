@@ -7,3 +7,7 @@
 /dist/
 /src/*.egg-info/
 __pycache__/
+tests/.coverage
+tests/coverage.xml
+tests/pytest.ini
+__init__.pyc

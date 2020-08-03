@@ -2,7 +2,6 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Type
 
-import yaml
 import pandas as pd
 import xarray as xr
 import numpy as np
@@ -14,9 +13,6 @@ from wys_ars.rays.utils import object_selection
 from wys_ars.simulation import Simulation
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.profiles import profile_2d as Profiles2D
-
-dir_src = Path(__file__).parent.absolute()
-default_tunnels_config = dir_src / "configs/tunnels_void_finder.yaml"
 
 
 class VoidsWarning(BaseException):
@@ -60,21 +56,24 @@ class Voids:
     @classmethod
     def from_file(
         cls,
-        dir_void: str,
-        file_dsc: Dict[str, str],
-        finder: str,
-        skymap_dsc: dict,
+        finder: str, skymap_dsc: dict,
+        ffile: Optional[str] = None,
+        file_dsc: Optional[dict] = None,
     ) -> "Voids":
         """
         Read void data files.
 
         Args:
+            file_dsc: {path, root, extension}
         """
-        sim = Simulation(dir_void, None, file_dsc, None)
-        _file_path = sim.files[file_dsc["root"]][0]
+        if ffile is None:
+            sim = Simulation(file_dsc["path"], None, file_dsc.pop("path"), None)
+            _file = sim.files[file_dsc["root"]][0]
+        else:
+            _file = ffile
 
         if finder == "tunnels":
-            data = pd.read_hdf(_file_path, key="df")
+            data = pd.read_hdf(_file, key="df")
             finder_spec = {
                 "name": finder,
                 "sigmas": {"name": "sigma", "values": data["sigma"].unique()},
@@ -117,7 +116,7 @@ class Voids:
                     ),
                 },
             }
-        return Voids(_file_path, data, finder_spec, skymap_dsc)
+        return Voids(_file, data, finder_spec, skymap_dsc)
 
     def _read_skymap(self, file_in: str) -> np.ndarray:
         """ load convergence maps in numpy format """
