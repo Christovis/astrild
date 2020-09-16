@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
+from scipy.ndimage.filters import convolve
 
 import healpy as hp
 import astropy
@@ -15,6 +16,7 @@ import lenstools
 from lenstools import ConvergenceMap
 
 from wys_ars.simulation import Simulation
+from wys_ars.rays.utils import filters as Filters
 from wys_ars import io as IO
 
 dir_src = Path(__file__).parent.absolute()
@@ -38,6 +40,9 @@ class SkyMap:
         dirs:
 
     Methods:
+        from_file:
+        pdf:
+        wl_peak_counts:
         add_galaxy_shape_noise:
         create_galaxy_shape_noise:
         smoothing:
@@ -154,17 +159,45 @@ class SkyMap:
             map_df.loc[:, [quantity]] /= c_light ** 3
         return map_df
    
-    @property
-    def pdf(self) -> None:
+    #@property
+    def pdf(self, nbins: int, of: str="orig") -> dict:
         _pdf = {}
         _pdf["values"], _pdf["bins"] = np.histogram(
-            self.data["orig"], bins=100, density=True,
+            self.data[of], bins=nbins, density=True,
         )
         return _pdf
 
+    #@property
+    def wl_peak_counts(
+        self,
+        nbins: int,
+        field_conversion: str,
+        of: str="orig",
+    ) -> pd.DataFrame:
+        if field_conversion == "normalize":
+            _map = self.data[of] - np.mean(self.skymap.data[of])
+        else:
+            _map = self.data[of]
+
+        lower_bound = np.percentile(self.data[of], 5)  #np.min(self.data[of])
+        upper_bound = np.percentile(self.data[of], 95)  #np.max(self.data[of])
+        map_bins = np.arange(
+            lower_bound, upper_bound, (upper_bound - lower_bound) / nbins,
+        )
+        _map = ConvergenceMap(data=_map, angle=self.opening_angle*un.deg)
+        _kappa, _pos = _map.locatePeaks(map_bins)
+        
+        _hist, _kappa = np.histogram(_kappa, bins=nbins, density=False)
+        _kappa = (_kappa[1:] + _kappa[:-1]) / 2
+        print(_kappa.min(), _kappa.max())
+        print(_hist, np.sum(_hist))
+        peak_counts_dic = {"kappa": _kappa, "counts": _hist}
+        peak_counts_df = pd.DataFrame(data=peak_counts_dic)
+        return peak_counts_df
+
     def smoothing(
         self,
-        kernel_width: float,
+        filter_dsc: dict,
         on: str,
     ) -> None:
         """
@@ -174,17 +207,24 @@ class SkyMap:
                 Kernel width of the smoothing length-scale in [arcmin]
         """
         if self.quantity == "kappa_2":
-            self.smoothing_length = kernel_width
             if on == "orig_gsn":
                 _map = self.add_galaxy_shape_noise()
             elif on == "orig":
                 _map = self.data["orig"]
 
-            _map = ConvergenceMap(data=_map, angle=self.opening_angle*un.deg)
-            _map = _map.smooth(
-                scale_angle=kernel_width * un.arcmin, kind="gaussian",
-            )
-            self.data[on + "_smooth"] = _map.data
+            for fil, args in filter_dsc.items():
+                if fil == "gaussian":
+                    self.smoothing_length = args["theta_i"]
+                    _map = Filters.gaussian_filter(
+                        _map, self.opening_angle, **args
+                    )
+                    self.data[on + "_gfilter"] = _map
+                if fil == "compensated_gaussian":
+                    self.smoothing_length = args["theta_i"]
+                    _map = Filters.compensated_gaussian_filter(
+                        _map, self.opening_angle, **args
+                    )
+                    self.data[on + "_gtfiler"] = _map
         else:
             raise SkyMapWarning("Not yet implemented")
 
@@ -262,17 +302,24 @@ class SkyMap:
         data.data = map_out
         return data
    
-    def to_file(self, dir_out: str, method: str, extension: str) -> None:
+    def to_file(
+        self,
+        dir_out: str,
+        on: str = "orig_gsn_smooth",
+        extension: str = "npy",
+    ) -> None:
         """
         """
+        if on == "orig_gsn":
+            self.data[on] = self.add_galaxy_shape_noise()
         self.dirs["out"] = dir_out
         filename = self._create_filename(
-            self.map_file, self.quantity, extension=extension
+            self.map_file, self.quantity, on, extension=extension
         )
-        IO.save_skymap(self.data["orig_gsn_smooth"], dir_out + filename)
+        IO.save_skymap(self.data[on], dir_out + filename)
 
     def _create_filename(
-        self, file_in: str, quantity: str, extension: str,
+        self, file_in: str, quantity: str, on: str, extension: str,
     ) -> str:
         """
         Args:
@@ -292,6 +339,9 @@ class SkyMap:
             ][0]
             file_out[idx] = string
             file_out = "_".join(file_out)
+        _file = file_out.split(".")[:-1] + [on] #.append(on)
+        _file = _file + [extension]
+        file_out = ".".join(_file)
         return file_out
     
     def to_healpix(

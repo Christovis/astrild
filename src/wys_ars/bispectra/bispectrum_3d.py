@@ -11,11 +11,11 @@ from wys_ars import io as IO
 from wys_ars.simulation import Simulation
 
 
-class PowerSpectrum3DWarning(BaseException):
+class Bispectrum3DWarning(BaseException):
     pass
 
 
-class PowerSpectrum3D:
+class Bispectrum3D:
     """
     Attributes:
         sim_type:
@@ -39,7 +39,9 @@ class PowerSpectrum3D:
         save: bool = True,
     ) -> Union[None, dict]:
         """
-        Power spectrum of particle quanities.
+        Bispectrum of particle quanities using fstar by:
+            arxiv: 1512.07295
+            arxiv: 1506.02729
         
         Args:
             quantity: [rho, phi, dphi/dt, chi, velocity, kappa, \Delta T]

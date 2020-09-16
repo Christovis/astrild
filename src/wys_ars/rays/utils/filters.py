@@ -1,14 +1,66 @@
 import numpy as np
 import pandas as pd
 from scipy import ndimage
+from scipy.ndimage.filters import convolve
+
+from astropy import units as un
+from lenstools import ConvergenceMap
 
 
-def hpf_gauss(img, kernel_width):
+def gaussian_filter(
+    img: np.ndarray, theta: float, theta_i: float,
+) -> np.ndarray:
+    """ Gaussian filter """
+    img = ConvergenceMap(data=img, angle=theta*un.deg)
+    img = img.smooth(scale_angle=theta_i * un.arcmin, kind="gaussian",)
+    return img.data
+
+def gaussian_high_pass_filter(img, kernel_width):
     """Gaussian high-pass filter"""
     lowpass = ndimage.gaussian_filter(img, kernel_width)
     img -= lowpass
     return img
 
+def compensated_gaussian_filter(
+    img: np.ndarray, theta: float, theta_i:float, theta_o: float,
+) -> np.ndarray:
+    """
+    Compensted gaussian filter as define in arxiv:1907.06657 (Eq. 16)
+
+    Args:
+        img: partial sky-map
+        theta: edge length in degrees of field-of-view
+        theta_i: Inner radius of CG-filter
+        theta_o: Outer radius of CG-filter
+    """
+    def U(theta: np.ndarray, theta_i: float, theta_o: float) -> np.ndarray:
+        """ Filter Function """
+        x = theta / theta_i
+        x_o = theta_o / theta_i
+        gt = (((np.pi * theta_i**2.)**(-1.)) * (np.exp(-1. * x**2.))) - \
+            (((np.pi * theta_o**2.)**(-1.)) * (1. - np.exp(-1. * x_o**2.)))
+        gt[theta_o < theta] = 0
+        return gt
+
+    # pixel width in degrees
+    pw = theta / img.shape[0]
+    # convert filter specifications from arcmin to pixel-width units
+    theta_i = (theta_i / 60. ) / pw
+    theta_o = (theta_o / 60. ) / pw
+    theta_o_int = np.ceil(theta_o).astype('int') #round up theta_o to be safe
+
+    #next we need to define a grid to map the filter onto, which we will use for the convolution
+    a = b = 0
+    y, x = np.ogrid[a-theta_o_int:a+theta_o_int, b-theta_o_int:b+theta_o_int]
+    weights = np.sqrt(x*x + y*y)
+
+    # pass the grid into the filter function
+    filt_trunc_gauss = U(weights, theta_i, theta_o)
+   
+    #convolve the filter grid and the data grid
+    img_filtered = convolve(img, filt_trunc_gauss)
+    
+    return img_filtered
 
 # class CTHF(dimensions=1):
 #    """
@@ -26,7 +78,7 @@ def hpf_gauss(img, kernel_width):
 #    def apply():
 
 
-def CTHF_map(rad_obj, obj_posx, obj_posy, mapp, alpha):
+def cthf_map(rad_obj, obj_posx, obj_posy, mapp, alpha):
     """
     Compensated top-hat filter on 2D map.
     Remove long wavelength from ISW signal from flat sky maps.
@@ -73,7 +125,7 @@ def CTHF_map(rad_obj, obj_posx, obj_posy, mapp, alpha):
     return white_hat - black_hat
 
 
-def CTHF_profile(profiles, extend, Nbins):
+def cthf_profile(profiles, extend, Nbins):
     """
     Compensated top-hat filter applied to profiles
     alpha: float

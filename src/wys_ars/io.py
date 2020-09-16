@@ -40,3 +40,6 @@ def _remove_existing_file(filename) -> None:
     if os.path.exists(filename):
         os.remove(filename)
 
+def save_DataFrame(direct: str, filename: str) -> None:
+    print("Save to -> ", direct + filename)
+    df.to_hdf(direct + filename, key="df", mode="w",)

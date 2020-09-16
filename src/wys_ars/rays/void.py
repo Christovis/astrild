@@ -176,7 +176,7 @@ class Voids:
             + f"{self.finder_spec['name']} voids"
         )
         self.profiles = Profiles2D.from_map(
-            self.data, _skymap, radii_max, nr_rad_bins, field_conversion,
+            self.data, _skymap, radii_max, nr_rad_bins,
         )
 
     def get_profile_stats(

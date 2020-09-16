@@ -43,7 +43,7 @@ class TunnelsFinder:
         self,
         on: str,
         field_conversion: str,
-        thresholds_dsc: dict = {"on": "orig", "nbins": 100},
+        thresholds_dsc: dict,
         snr_sigma: Optional[float] = None,
     ) -> None:
         """
@@ -54,6 +54,7 @@ class TunnelsFinder:
         Args:
         Returns:
         """
+        self.on = on
         if field_conversion == "normalize":
             _map = self.skymap.data[on] - np.mean(self.skymap.data[on])
         else:
@@ -129,7 +130,10 @@ class TunnelsFinder:
         )
         kappa = kappa[indx]
         pos = pos[indx, :]
-        print("Peaks trimmed %d away and have % left" % (len(indx), len(kappa)))
+        print(
+            f"{len(indx)} peaks were within smoothing_length of FOV edge" + \
+            f" and had to be removed. \n{len(kappa)} peaks are left."
+        )
         return kappa, pos
 
 
@@ -178,7 +182,8 @@ class TunnelsFinder:
             file_voids_bin = f"{dir_out}/voids_in_kappa2_nu{snr_label}.bin"
             os.system(
                 f"{this_file_path}/tunnels/void_finder_spherical_2D " + \
-                f"{file_peaks_bin} {file_voids_bin} -l 1. -a 0.2 -x 0 -y 1;"
+                f"{file_peaks_bin} {file_voids_bin} -l 0. -a 0.2 -x 0 -y 1;" # overlapping
+                #f"{file_peaks_bin} {file_voids_bin} -l 1. -a 0.2 -x 0 -y 1;" # non-oberlap.
             )
 
             # read void results and prepare pd.DataFrame for storage
@@ -259,15 +264,16 @@ class TunnelsFinder:
         return peaks
 
     def to_file(self, dir_out: str) -> None:
-        filename = self._create_filename(obj="voids", dir_out=dir_out)
+        filename = self._create_filename(obj="voids", dir_out=dir_out, on=self.on)
+        print("Save voids in -> ", filename)
         self.voids_df.to_hdf(filename, key="df")
-        filename = self._create_filename(obj="peaks", dir_out=dir_out)
+        filename = self._create_filename(obj="peaks", dir_out=dir_out, on=self.on)
         self.peaks_df.to_hdf(filename, key="df")
         #IO.save_peaks_and_voids(filename)
 
-    def _create_filename(self, obj: str, dir_out: str) -> str:
+    def _create_filename(self, obj: str, dir_out: str, on: str) -> str:
         _filename = self.skymap._create_filename(
-            self.skymap.map_file, self.skymap.quantity, extension="_"
+            self.skymap.map_file, self.skymap.quantity, on, extension="_"
         )
         #_filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
         _filename = ''.join(_filename.split(".")[:-1])

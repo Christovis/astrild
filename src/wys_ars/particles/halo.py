@@ -277,7 +277,17 @@ class Halos:
                 df = pd.DataFrame(
                     data=stg["results"]["values"], index=stg["results"]["bins"][columns[0]],
                 )
-                file_out = self.sim.dirs["out"] + halofinder + "_" + method + ".h5"
+                if "seperate" in list(stg["args"].keys()):
+                    compare = np.sum(stg["args"]["seperate"]["compare"])
+                    if compare == 2:
+                        compare = "11"
+                    if compare == 3:
+                        compare = "12"
+                    if compare == 4:
+                        compare = "22"
+                else:
+                    compare = "00"
+                file_out = f"{self.sim.dirs['out']}{halofinder}_{method}_{compare}.h5"
                 if os.path.exists(file_out):
                     os.remove(file_out)
                 print(f"Saving results to -> {file_out}")
@@ -287,12 +297,12 @@ class Halos:
                     data = np.asarray(list(stg_in_snap.values())).T
                     columns = list(stg_in_snap.keys())
                     df = pd.DataFrame(data=data, columns=columns)
-                    file_out = f"{self.sim.dirs['out']}{halofinder}_{method}_{snap_nr}.h5"
+                    file_out = f"{self.sim.dirs['out']}{halofinder}_{method}" + \
+                            "_{snap_nr}.h5"
                     if os.path.exists(file_out):
                         os.remove(file_out)
                     print(f"Saving results to -> {file_out}")
                     df.to_hdf(file_out, key="df", mode="w")
-
 
 
     def _create_filename(self, file_in: str, quantity: str):

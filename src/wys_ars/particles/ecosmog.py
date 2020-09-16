@@ -57,7 +57,7 @@ class Ecosmog(Simulation):
         self,
         dir_sim: str,
         dir_out: str = None,
-        file_dsc: dict = {"root": "snap_012", "extension": None},
+        file_dsc: dict = {"root": "snap_010", "extension": None},
         dir_root: str = "snapdir",
         boxsize: float = 500.0,
         domain_level: int = 512,
@@ -97,6 +97,7 @@ class Ecosmog(Simulation):
             file_dsc:
                 File describtion of files to use for analyzes
         """
+        print("dtfe asser ------> ", snap_nrs, self.dir_nrs)
         # filter snapshot numbers
         if snap_nrs:
             assert set(snap_nrs) < set(self.dir_nrs), EcosmogWarning(

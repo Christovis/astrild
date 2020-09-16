@@ -1,4 +1,6 @@
+from . import bispectra
 from . import particles
+from . import power_spectra
 from . import profiles
 from . import rays
 from . import utils

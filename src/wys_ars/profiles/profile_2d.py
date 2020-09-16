@@ -12,7 +12,6 @@ def from_map(
     skymap: np.ndarray,
     extend: float,
     nr_profile_bins: int,
-    field_conversion: str,
 ) -> dict:
     """
     Generate profiles for a list of objects [peaks, voids].
@@ -52,7 +51,6 @@ def from_map(
             delta_eta,
             extend,
             nr_profile_bins,
-            field_conversion = field_conversion,
         )
         profiles["values"].append(profile["values"])
     profiles["values"] = np.asarray(profiles["values"])
@@ -97,7 +95,6 @@ def profiling(
     delta_eta: float,
     extend: float,
     nr_profile_bins: int,
-    field_conversion: Optional[str] = None,
 ) -> Dict[str, np.array]:
     """
     Profile of single object on a 2D map.
@@ -112,8 +109,6 @@ def profiling(
             The annulus thickness normalised against ith void radius.
         extend:
         nr_profile_bins:
-        field_conversion:
-            E.g. if you want to scale the profile by its mean.
     """
     prof_radius = np.ceil(obj_radius * extend).astype(int)
     # distance of every pixel to centre
@@ -144,15 +139,7 @@ def profiling(
     r = 0.5 * (r_2[1:] + r_2[:-1])
     profile["radii"] = r
     # Radial bin values
-    if field_conversion in [None, "normalize"]:
-        profile["values"] = annulus_value / annulus_count
-    elif field_conversion == 'tangential_shear':
-        kappa = annulus_value / annulus_count
-        profile["values"] = np.mean(kappa) - kappa
-    elif field_conversion == 'reduced_shear':
-        kappa = annulus_value / annulus_count
-        gamma_t = np.mean(kappa) - kappa
-        profile["values"] = gamma_t / (1 - kappa)
+    profile["values"] = annulus_value / annulus_count
     return profile
 
 

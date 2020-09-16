@@ -62,6 +62,7 @@ class Simulation:
     ) -> Union[np.array, Dict[int, np.array]]:
         """ """
         _files = self._get_all_files(file_dsc, directory)
+
         if len(_files) == 0:
             _files = self._get_all_files(file_dsc, self.dirs[self.dir_root][0])
 
