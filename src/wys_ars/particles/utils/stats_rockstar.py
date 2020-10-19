@@ -12,6 +12,29 @@ from wys_ars.utils.arepo_hdf5_library import read_hdf5
 
 
 class Rockstar:
+    def halo_mass_fct(
+        snapshot: pd.DataFrame,
+        limits: tuple = (11.78, 16),
+        nbins: int = 20,
+    ) -> tuple:
+        """
+        Compute the halo mass function
+
+        Args:
+            data:
+                halo mass in [M_{\odot}/h]
+        """
+        bins = np.logspace(min(limits), max(limits), nbins + 1)
+        mass = snapshot["m200c"].values
+        print("min mass ----------------->", np.min(mass))
+        mass = mass[min(limits) < mass]
+        # count halos within mass range
+        mass_count, edges = np.histogram(mass, bins=bins)
+        # calculate mass function
+        mass_count = np.cumsum(mass_count[::-1])[::-1]
+        mass_bin = (edges[1:] + edges[:-1]) / 2.0
+        return mass_bin, mass_count
+
     def histograms(
         snapshot: pd.DataFrame,
         nbins: int,
@@ -34,7 +57,8 @@ class Rockstar:
                     snapshot[prop].values, bins=nbins, range=limits, density=True,
                 )[0]
         elif dimesions == 2:
-            #TODO https://stackoverflow.com/questions/57562613/python-earth-mover-distance-of-2d-arrays
+            #TODO
+            # https://stackoverflow.com/questions/57562613/python-earth-mover-distance-of-2d-arrays
             pass
         return hist
 
@@ -81,3 +105,26 @@ class Rockstar:
             mass_bins = None
             c_mean = None
         return mass_bins, c_mean
+
+    def two_point_corr_fct(
+        snapshot: pd.DataFrame,
+        limits: tuple = None,
+        nbins: int = None,
+        boxsize: float = None,
+    ) -> tuple:
+        if boxsize is None:
+            boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
+        if limits is None:
+            limits = (0.3, boxsize / 5)
+        if nbins is None:
+            nbins = int(2 / 3 * max(limits))
+
+        r = np.geomspace(min(limits), max(limits), nbins)
+        r_c = 0.5 * (r[1:] + r[:-1])
+        real_tpcf = mo.tpcf(
+            snapshot[["x", "y", "z"]].values,  #[Mpc/h]
+            rbins=r,  #[Mpc/h]
+            period=boxsize,
+            estimator="Landy-Szalay",
+        )
+        return r_c, real_tpcf

@@ -10,16 +10,72 @@ from lenstools import ConvergenceMap
 def gaussian_filter(
     img: np.ndarray, theta: float, theta_i: float,
 ) -> np.ndarray:
-    """ Gaussian filter """
+    """
+    Gaussian low-pass filter
+
+    Args:
+        img: partial sky-map
+        theta: edge-lenght of field-of-view [arcmin]
+        theta_i: smoothing kernel width [arcmin]
+    """
     img = ConvergenceMap(data=img, angle=theta*un.deg)
     img = img.smooth(scale_angle=theta_i * un.arcmin, kind="gaussian",)
     return img.data
 
+def gaussian_low_pass_filter(img, kernel_width):
+    """
+    Gaussian low-pass filter
+    
+    Args:
+        img: partial sky-map
+        theta: edge-lenght of field-of-view [arcmin]
+        theta_i: smoothing kernel width [arcmin]
+    """
+    lowpass = ndimage.gaussian_filter(
+        img,
+        sigma=kernel_width,
+        order=0,
+        output=np.float64,
+        mode='nearest',
+    )
+    return lowpass
+
 def gaussian_high_pass_filter(img, kernel_width):
-    """Gaussian high-pass filter"""
+    """
+    Gaussian high-pass filter
+    
+    Args:
+        img: partial sky-map
+        theta: edge-lenght of field-of-view [arcmin]
+        theta_i: smoothing kernel width [arcmin]
+    """
     lowpass = ndimage.gaussian_filter(img, kernel_width)
     img -= lowpass
     return img
+
+def gaussian_third_derivative_filter(
+    img: np.ndarray, sigma: float, direction: int,
+) -> np.ndarray:
+    """
+    Omni-directional third derivative gaussian kernel (also called DGD3 filter),
+    useful for extracting dipole signal, based on
+    DOI: 10.3847/2041-8213/ab0bfe
+    arXiv: 1812.04241
+
+    Args:
+        img: partial sky-map
+        sigma: ideally it should be the width of halo, R200. units are [pix]
+    """
+    gauss_1 = ndimage.gaussian_filter(
+        img, sigma*0.5, order=3*direction, output=np.float64, mode='nearest'
+    )
+    gauss_2 = ndimage.gaussian_filter(
+        img, sigma*1.0, order=3*direction, output=np.float64, mode='nearest'
+    )
+    gauss_3 = ndimage.gaussian_filter(
+        img, sigma*2.0, order=3*direction, output=np.float64, mode='nearest'
+    )
+    return gauss_1 - gauss_2 + gauss_3
 
 def compensated_gaussian_filter(
     img: np.ndarray, theta: float, theta_i:float, theta_o: float,
@@ -61,6 +117,8 @@ def compensated_gaussian_filter(
     img_filtered = convolve(img, filt_trunc_gauss)
     
     return img_filtered
+
+
 
 # class CTHF(dimensions=1):
 #    """

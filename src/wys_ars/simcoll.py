@@ -98,12 +98,19 @@ class SimulationCollection:
         z_nrs = z_nrs[z_nrs < 2.3]
         return z_nrs
 
+    def _find_nearest(self, array: np.ndarray, value: float) -> float:
+        """ Find element in array closest to value """
+        array = np.asarray(array)
+        idx = (np.abs(array - value)).argmin()
+        return array[idx]
+
     def compress_stats(
         self,
         file_dsc: Dict[str, str],
         dir_out: str,
         snap_nrs: Optional[np.ndarray] = None,
         z_nrs: Optional[List[float]] = None,
+        a_nrs: Optional[List[float]] = None,
         zmatch: bool = False,
         labels: Optional[Dict[str, str]] = {"x": "bin", "y": "value"},
     ) -> None:
@@ -112,9 +119,18 @@ class SimulationCollection:
         pandas .h5 format into one xarray dataset file.
 
         Args:
+            snap_nrs: Snapshot numbers at which to compare stats
+            z_nrs: Redshifts at which to compare stats
+            a_nrs: Scale factors at which to compare stats
         """
         if zmatch:
             z_nrs = self._find_common_z()
+        elif z_nrs is not None:
+            z_available = self.config["redshift"].values
+            z_nrs = [self._find_nearest(z_available, z) for z in z_nrs]
+        elif a_nrs is not None:
+            z_available = self.config["redshift"].values
+            z_nrs = [self._find_nearest(z_available, (1/a - 1)) for a in a_nrs]
 
         # initialize arrays that will contain results
         if file_dsc["extension"] == "h5":

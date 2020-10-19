@@ -14,6 +14,7 @@ from lenstools import ConvergenceMap
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.voids.tunnels import halo
 from wys_ars.rays.voids.tunnels import textFile
+from wys_ars import io as IO
 
 this_file_path = Path(__file__).parent.absolute()
 
@@ -45,6 +46,7 @@ class TunnelsFinder:
         field_conversion: str,
         thresholds_dsc: dict,
         snr_sigma: Optional[float] = None,
+        save: bool = False,
     ) -> None:
         """
         Find peaks on convergence map. It is assumed that the convergence maps
@@ -71,9 +73,13 @@ class TunnelsFinder:
         # find significance of peaks
         _peaks["snr"] = self._signal_to_noise_ratio(_peaks["kappa"], _map.data, snr_sigma)
         self.peaks = _peaks
+        if save:
+            #IO.save()
+            pass
 
     def _get_convergence_thresholds(
-        self, on: str = "orig", nbins: int = 100) -> np.array:
+        self, on: str = "orig", nbins: int = 100,
+    ) -> np.array:
         """
         Define thresholds for lenstools to find peaks on convergence map.
         Important to do this on un-smoothed and with no-gsn skymap.
@@ -138,16 +144,21 @@ class TunnelsFinder:
 
 
     def find_voids(
-        self, snrs: List[float], rtn: bool = False,
+        self, snrs: List[float], dir_temp: Optional[str] = None, rtn: bool = False,
     ) -> None:
         """
         analyze convergence map for different peak heights
         Args:
             snr: signifance of void traces, in this case peaks on convergence map.
+            dir_temp: directory for temporary file storage. Files will be deleted after,
+                voids were found.
         Returns:
             Creates pd.DataFrame for voids and peaks
         """
-        dir_out = "/".join(self.skymap.map_file.split("/")[:-1])
+        if dir_temp:
+            dir_out = dir_temp
+        else:
+            dir_out = "/".join(self.skymap.map_file.split("/")[:-1])
         first = True
         for snr in snrs:
             print("\n Start analyzes for nu=%f" % snr)
@@ -211,6 +222,7 @@ class TunnelsFinder:
                 peaks_df_sum = peaks_df_sum.append(
                     self.filtered_peaks, ignore_index=True
                 )
+        self.peaks_orig_df = pd.DataFrame(data=self.peaks["snr"])
         if rtn:
             return peaks_df_sum, voids_df_sum
         else:
@@ -268,7 +280,7 @@ class TunnelsFinder:
         print("Save voids in -> ", filename)
         self.voids_df.to_hdf(filename, key="df")
         filename = self._create_filename(obj="peaks", dir_out=dir_out, on=self.on)
-        self.peaks_df.to_hdf(filename, key="df")
+        self.peaks_orig_df.to_hdf(filename, key="df")
         #IO.save_peaks_and_voids(filename)
 
     def _create_filename(self, obj: str, dir_out: str, on: str) -> str:

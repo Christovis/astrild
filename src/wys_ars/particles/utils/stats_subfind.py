@@ -1,16 +1,24 @@
+import pandas as pd
 import numpy as np
 from scipy.stats import binned_statistic
 from scipy.optimize import curve_fit, newton
 
+import pmesh
+
 from halotools.mock_observables import tpcf
 from halotools import mock_observables as mo
+from nbodykit.lab import *
 
 from wys_ars.utils.arepo_hdf5_library import read_hdf5
+from wys_ars import io as IO
 
 
 class SubFind:
     def halo_mass_fct(
-        snapshot: read_hdf5.snapshot, limits: tuple = (11.78, 16), nbins: int = 20,
+        snapshot: read_hdf5.snapshot,
+        subfind_field: str = "Group_M_Crit200",
+        limits: tuple = (11.78, 16),
+        nbins: int = 20,
     ) -> tuple:
         """
         Compute the halo mass function
@@ -19,23 +27,27 @@ class SubFind:
             data:
                 halo mass in [M_{\odot}/h]
         """
-        if "Group_M_Crit200" not in snapshot.cat:
-            raise ValueError(f"'Group_M_Crit200' data not loaded")
+        if subfind_field not in snapshot.cat:
+            raise ValueError(f"'{subfind_field}' data not loaded")
         bins = np.logspace(min(limits), max(limits), nbins + 1)
-        mass = snapshot.cat["Group_M_Crit200"][:]  # [Msun/h]
+        mass = snapshot.cat[subfind_field][:] * snapshot.header.hubble  # [Msun/h]
         mass = mass[min(limits) < mass]
+        # count halos within mass range
         mass_count, edges = np.histogram(mass, bins=bins)
+        # calculate mass function
+        mass_count = np.cumsum(mass_count[::-1])[::-1]
         mass_bin = (edges[1:] + edges[:-1]) / 2.0
         return mass_bin, mass_count
 
-    def two_point_corr_fct(
+    def tpcf_r(
         snapshot: read_hdf5.snapshot,
+        subfind_field: str = "SubhaloPos",
         limits: tuple = None,
         nbins: int = None,
         boxsize: float = None,
     ):
         """
-        Comput the real space two point correlation function using halotools
+        Comput the real-space two point correlation function using halotools
 
         Args:
             data:
@@ -43,6 +55,7 @@ class SubFind:
             boxsize:
                 box size of the simulation in the same units as positions.
         """
+        print("-----------------------", subfind_field)
         if boxsize is None:
             boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
         if limits is None:
@@ -53,12 +66,92 @@ class SubFind:
         r = np.geomspace(min(limits), max(limits), nbins)
         r_c = 0.5 * (r[1:] + r[:-1])
         real_tpcf = mo.tpcf(
-            snapshot.cat["GroupPos"][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
+            snapshot.cat[subfind_field][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
             rbins=r,  #[Mpc/h]
             period=boxsize,
             estimator="Landy-Szalay",
         )
         return r_c, real_tpcf
+    
+    def tpcf_s(
+        snapshot: read_hdf5.snapshot,
+        subfind_field: str = "GroupPos",
+        limits: tuple = None,
+        nbins: int = None,
+        boxsize: float = None,
+    ):
+        """
+        Comput the real-space two point correlation function using halotools
+
+        Args:
+            data:
+                3D array with the cartesian coordiantes of the tracers.
+            boxsize:
+                box size of the simulation in the same units as positions.
+        """
+        print("-----------------------", subfind_field)
+        if boxsize is None:
+            boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
+        if limits is None:
+            limits = (0.3, boxsize / 5)
+        if nbins is None:
+            nbins = int(2 / 3 * max(limits))
+
+        r = np.geomspace(min(limits), max(limits), nbins)
+        r_c = 0.5 * (r[1:] + r[:-1])
+        real_tpcf = mo.tpcf(
+            snapshot.cat[subfind_field][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
+            rbins=r,  #[Mpc/h]
+            period=boxsize,
+            estimator="Landy-Szalay",
+        )
+        return r_c, real_tpcf
+
+    def power_spectrum(
+        snapshot: read_hdf5.snapshot,
+        objects: str = "subhalo",
+        limits: tuple = None,
+        nbins: int = 512,
+        boxsize: float = 500.,
+    ):
+        """
+        Comput the real-space halo power spectrum
+
+        Args:
+        """
+        if boxsize is None:
+            boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
+
+        if objects == "subhalo":
+            pos_field = snapshot.cat["SubhaloPos"][:] * snapshot.header.hubble / 1e3  #[Mpc/h]
+            mass_field = snapshot.cat["SubhaloMass"][:] * snapshot.header.hubble / 1e10
+            print(np.min(mass_field), np.max(mass_field))
+
+        dx = boxsize / nbins
+        pm = pmesh.pm.ParticleMesh(Nmesh=[nbins]*3, BoxSize=boxsize)
+        value_map = pm.paint(pos_field, mass=mass_field, resampler="tsc")
+        value_map = value_map.value / dx**3
+
+        mesh = ArrayMesh(
+            value_map,
+            Nmesh=nbins,
+            compensated=False,
+            #interlaced=True,
+            #window='TSC',
+            BoxSize=boxsize,
+        )
+        r = FFTPower(       
+            first=mesh,
+            mode="1d",
+            # dk=Delta_k,
+            kmin=2 * np.pi / boxsize,
+            # kmax=None,  
+        )
+        k = np.array(r.power["k"])
+        Pk = np.array(r.power["power"].real - r.power.attrs["shotnoise"])
+        print("***********************************")
+        print(k, Pk)
+        return k, Pk
 
     def mean_pairwise_velocity(
         snapshot: read_hdf5.snapshot,

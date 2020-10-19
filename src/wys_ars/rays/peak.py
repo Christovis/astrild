@@ -56,10 +56,10 @@ class Peaks:
     @classmethod
     def from_file(
         cls,
-        _file: Optional[str] = None,
-        file_dsc: Optional[dict] = None,
         finder: str,
         skymap_dsc: dict,
+        _file: Optional[str] = None,
+        file_dsc: Optional[dict] = None,
     ) -> "Peaks":
         """
         Read void data files.

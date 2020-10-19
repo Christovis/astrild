@@ -32,7 +32,7 @@ class PowerSpectrum3D:
 
     def compute(
         self,
-        quantity: List[str],
+        quantities: List[str],
         file_dsc: List[Dict[str, str]],
         snap_nrs: Optional[List[int]] = None,
         dir_out: Optional[str] = None,
@@ -42,7 +42,7 @@ class PowerSpectrum3D:
         Power spectrum of particle quanities.
         
         Args:
-            quantity: [rho, phi, dphi/dt, chi, velocity, kappa, \Delta T]
+            quantities: [rho, phi, dphi/dt, chi, velocity, kappa, \Delta T]
             file_dsc: {path: , root: , extention: }
         """
         if snap_nrs:
@@ -71,12 +71,12 @@ class PowerSpectrum3D:
 
         snap_nrs = np.sort(snap_nrs)
         if len(file_dsc) > 1:
-            pk = self._cross_power_spectra(quantity, snap_nrs, _file_paths1, _file_paths2)
+            pk = self._cross_power_spectra(quantities, snap_nrs, _file_paths1, _file_paths2)
         else:
-            pk = self._auto_power_spectra(quantity, snap_nrs, _file_paths1)
+            pk = self._auto_power_spectra(quantities, snap_nrs, _file_paths1)
         
         if save:
-            self._save_results(quantity, pk)
+            self._save_results(quantities, pk)
         else:
             return pk
    
@@ -112,6 +112,7 @@ class PowerSpectrum3D:
     
     def _cross_power_spectra(
         self,
+        quantity: List[str],
         snap_nrs: np.array,
         _file_paths1: List[str],
         _file_paths2: List[str],
@@ -178,13 +179,13 @@ class PowerSpectrum3D:
                 power at each wavenumber
         """
         _k_min = 2 * np.pi / self.sim.boxsize
-        _mesh1 = ArrayMesh(
-            value_map1,
-            Nmesh=self.sim.domain_level,
-            compensated=False,
-            BoxSize=self.sim.boxsize,
-        )
         if value_map2 is None:
+            _mesh1 = ArrayMesh(
+                value_map1,
+                Nmesh=self.sim.domain_level,
+                compensated=False,
+                BoxSize=self.sim.boxsize,
+            )
             r = FFTPower(
                 _mesh1,
                 mode="1d",
@@ -193,22 +194,34 @@ class PowerSpectrum3D:
                 # kmax=None,
             )
         else:
+            _mesh1 = ArrayMesh(
+                value_map1,
+                Nmesh=self.sim.domain_level,
+                compensated=True,
+                interlaced=True,
+                window='TSC',
+                BoxSize=self.sim.boxsize,
+            )
             _mesh2 = ArrayMesh(
                 value_map2,
                 Nmesh=self.sim.domain_level,
-                compensated=False,
+                compensated=True,
+                interlaced=True,
+                window='TSC',
                 BoxSize=self.sim.boxsize,
             )
+            # apply correction for the window to the mesh
+            #_mesh1 = _mesh1.apply(_mesh1.CompensateTSC, kind='circular', mode='complex')
+            #_mesh2 = _mesh2.apply(_mesh2.CompensateTSC, kind='circular', mode='complex')
             r = FFTPower(
                 first=_mesh1,
                 mode="1d",
                 second=_mesh2,
                 kmin=_k_min,
+                #kmax=3.,
             )
-        k = np.array(r.power["k"])  # the k-bins
-        Pk = np.array(r.power["power"].real)  # the power spectrum
-        Pk_shotnoise = r.power.attrs["shotnoise"]  # shot-noise
-        Pk -= Pk_shotnoise
+        k = np.array(r.power["k"])
+        Pk = np.array(r.power["power"].real - r.power.attrs["shotnoise"])
         print("Pk wavenumber ------>", k.min(), k.max())
         return k, Pk
 

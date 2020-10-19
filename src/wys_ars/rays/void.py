@@ -13,6 +13,7 @@ from wys_ars.rays.utils import object_selection
 from wys_ars.simulation import Simulation
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.profiles import profile_2d as Profiles2D
+from wys_ars import io as IO
 
 
 class VoidsWarning(BaseException):
@@ -21,7 +22,7 @@ class VoidsWarning(BaseException):
 
 class Voids:
     """
-    Class to manage void finders such as tunnels, svf, and watershed.
+    Class to manage void finders such as tunnels, svf/zobov, and watershed.
 
     Attributes:
         dataset_file:
@@ -116,6 +117,12 @@ class Voids:
                     ),
                 },
             }
+        elif finder == "wvf":
+            data = pd.read_hdf(_file, key="df")
+            finder_spec = None
+            finder_spec = {
+                "name": finder,
+            }
         return Voids(_file, data, finder_spec, skymap_dsc)
 
     def _read_skymap(self, file_in: str) -> np.ndarray:
@@ -131,15 +138,54 @@ class Voids:
         return skymap
 
 
+    def get_void_size_fct(
+        self,
+        nbins: int,
+        limits: Optional[tuple] = None,
+        save: bool = True,
+        mapp: Optional[str] = None,
+        dir_out: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """ """
+        for idx, nu in enumerate(np.unique(self.data["sigma"].values)):
+            nu_idx = self.data["sigma"].values == nu
+            rad_deg = self.data["rad_deg"].values[nu_idx]
+
+            if limits is None:
+                lower_bound = np.percentile(rad_deg, 5)
+                upper_bound = np.percentile(rad_deg, 95)
+            else:
+                lower_bound = min(limits[idx])
+                upper_bound = max(limits[idx])
+            print("------------------------------------", len(rad_deg), lower_bound, upper_bound)
+
+            bins = np.arange(
+                lower_bound, upper_bound, (upper_bound - lower_bound) / nbins,
+            )
+
+            _hist, _rad = np.histogram(
+                self.data["rad_deg"].values, bins=bins, range=limits, density=False,
+            )
+            _hist = np.cumsum(_hist[::-1])[::-1]
+            _rad = (_rad[1:] + _rad[:-1]) / 2.0
+            void_counts_dic = {"rad": _rad, "counts": _hist}
+            void_counts_df = pd.DataFrame(data=void_counts_dic)
+            
+            if save:
+                filename = f"tunnel_void_counts_zrange_0.08_0.90_{mapp}_nu{int(nu)}.h5"
+                IO.save_dataFrame(dir_out, filename, void_counts_df)
+        
+
     def get_profiles(
         self,
         radii_max: float,
         nr_rad_bins: int,
+        void_resolution: int = 10,
         skymap_file: Optional[str] = None,
         skymap: Optional[np.ndarray] = None,
-        save: bool = False,
         field_conversion: Optional[str] = None,
         dir_out: Optional[str] = None,
+        save: bool = False,
     ) -> None:
         """
         Find the profile of voids on wys_ars.rays.SkyMap
@@ -166,11 +212,14 @@ class Voids:
             # center map on zero
             _skymap -= np.mean(_skymap)
 
-        if self.finder_spec["name"] == "tunnels":
+        if self.finder_spec["name"] in ["tunnels", "wvf"]:
             self.data = self._trim_edges(
                 self.data, radii_max, self.skymap_dsc["npix"],
             )
             self.data = self.data.reset_index()
+        # only resolved voids
+        self.data = self.data[radii_max*self.data["rad_pix"] > void_resolution]
+        self.data = self.data.reset_index()
         print(
             f"Get the profile of {len(self.data.index)} "
             + f"{self.finder_spec['name']} voids"
@@ -178,12 +227,26 @@ class Voids:
         self.profiles = Profiles2D.from_map(
             self.data, _skymap, radii_max, nr_rad_bins,
         )
+        if save:
+            dir_out = '/'.join(self.dataset_file.split("/")[:-1])
+            if self.field_conversion is None:
+                self.field_conversion = ''
+            filename = self.field_conversion + '_' + \
+                ''.join(self.dataset_file.split("/")[-1].split(".")[:-1])
+            filename = f"{dir_out}/signle_profiles_{filename}.h5"
+            print(f"Save profiles in -> {filename}")
+            df = pd.DataFrame(
+                data=self.profiles["values"].T,
+                index=self.profiles["radii"],
+                columns=self.data.index.values,
+            )
+            df.to_hdf(filename, key='df', mode='w')
 
     def get_profile_stats(
         self,
-        cats: List[str],
+        cats: Optional[List[str]] = None,
         field_conversion: Optional[str] = None,
-        dir_out: str = None,
+        dir_out: Optional[str] = None,
         save: bool = False,
     ) -> None:
         """
@@ -193,79 +256,136 @@ class Voids:
             cats:
                 What categorizations to use.
         """
-        if (field_conversion is not None and
-            self.field_conversion is not None and
-            field_conversion != self.field_conversion):
-            raise VoidsWarning("Contradictory field convergence")
-        elif field_conversion is not None:
+        if field_conversion:
             self.field_conversion = field_conversion
         
-        # initialize result arrays
-        cat_per_cats = [len(np.unique(self.data[cat].values)) for cat in cats]
-        cats_dict = {cat:np.unique(self.data[cat].values) for idx, cat in enumerate(cats)}
-        nr_rad_bins = len(self.profiles["radii"])
-        _mean = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
-        _low_err = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
-        _high_err = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
-        _obj_size_min = np.zeros(tuple(cat_per_cats))
-        _obj_size_max = np.zeros(tuple(cat_per_cats))
-        _obj_in_cat = np.zeros(tuple(cat_per_cats))
+        if cats:
+            # initialize result arrays
+            cat_per_cats = [len(np.unique(self.data[cat].values)) for cat in cats]
+            cats_dict = {cat:np.unique(self.data[cat].values) for idx, cat in enumerate(cats)}
+            nr_rad_bins = len(self.profiles["radii"])
+            _mean = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
+            _low_err = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
+            _high_err = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
+            _obj_size_min = np.zeros(tuple(cat_per_cats))
+            _obj_size_max = np.zeros(tuple(cat_per_cats))
+            _obj_in_cat = np.zeros(tuple(cat_per_cats))
 
-        #TODO create dynamic for-loops via recursion
-        for ss, sigma in enumerate(cats_dict["sigma"]):
+            #TODO create dynamic for-loops via recursion
+            for ss, sigma in enumerate(cats_dict["sigma"]):
+                # filter voids
+                _void_in_cat = self.data.loc[self.data["sigma"] == sigma]
+                print(
+                    f"There are {len(_void_in_cat.index.values)} "
+                    + f"profiles for nu=(sigma)"
+                )
+                # clean-up and averaging profiles
+                _mean[ss, :] = Profiles2D.mean_and_interpolate(
+                    self.profiles["values"][_void_in_cat.index.values, :],
+                    _void_in_cat["rad_pix"].values,
+                    self.profiles["radii"].max(),
+                    len(self.profiles["radii"]),
+                )
+                if self.field_conversion == 'tangential_shear':
+                    _mean[ss, :] = self._compute_tangential_shear(
+                        self.profiles["radii"], _mean[ss, :],
+                    )
+                # apply bootstrap to get errors
+                error = Profiles2D.bootstrapping(
+                    self.profiles["values"][_void_in_cat.index.values, :],
+                    _mean[ss, :],
+                    _void_in_cat,
+                    self.skymap_dsc["npix"],
+                    self.profiles["radii"].max(),
+                    len(self.profiles["radii"]),
+                )
+                _low_err[ss, :] = error[0, :]
+                _high_err[ss, :] = error[1, :]
+
+                # min. & max. void size in bin
+                #(* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
+                _obj_size_min[ss] = _void_in_cat["rad_deg"].min()
+                _obj_size_max[ss] = _void_in_cat["rad_deg"].max()
+                _obj_in_cat[ss] = len(_void_in_cat.index)
+            ds = xr.Dataset(
+                {
+                    "mean": (list(cats_dict.keys()) + ["radius"], _mean),
+                    "lowerr": (list(cats_dict.keys()) + ["radius"], _low_err),
+                    "higherr": (list(cats_dict.keys()) + ["radius"], _high_err),
+                },
+                coords={
+                    "sigma": cats_dict["sigma"],
+                    "radius": self.profiles["radii"],
+                    "size_min": (list(cats_dict.keys()), _obj_size_min),
+                    "size_max": (list(cats_dict.keys()), _obj_size_max),
+                    "nr_of_obj": (list(cats_dict.keys()), _obj_in_cat),
+                },
+            )
+        else:
+            # initialize result arrays
+            nr_rad_bins = len(self.profiles["radii"])
+            _mean = np.zeros(nr_rad_bins)
+            _low_err = np.zeros(nr_rad_bins)
+            _high_err = np.zeros(nr_rad_bins)
+            _obj_size_min = np.zeros(1)
+            _obj_size_max = np.zeros(1)
+            _obj_in_cat = np.zeros(1)
+
+            #TODO create dynamic for-loops via recursion
             # filter voids
-            _void_in_cat = self.data.loc[self.data["sigma"] == sigma]
+            _void_in_cat = self.data
             # clean-up and averaging profiles
-            _mean[ss, :] = Profiles2D.mean_and_interpolate(
+            _mean[:] = Profiles2D.mean_and_interpolate(
                 self.profiles["values"][_void_in_cat.index.values, :],
                 _void_in_cat["rad_pix"].values,
                 self.profiles["radii"].max(),
                 len(self.profiles["radii"]),
             )
             if self.field_conversion == 'tangential_shear':
-                _mean[ss, :] = self._compute_tangential_shear(
-                    self.profiles["radii"], _mean[ss, :],
+                _mean[:] = self._compute_tangential_shear(
+                    self.profiles["radii"], _mean[:],
                 )
             # apply bootstrap to get errors
             error = Profiles2D.bootstrapping(
                 self.profiles["values"][_void_in_cat.index.values, :],
-                _mean[ss, :],
+                _mean[:],
                 _void_in_cat,
                 self.skymap_dsc["npix"],
                 self.profiles["radii"].max(),
                 len(self.profiles["radii"]),
             )
-            _low_err[ss, :] = error[0, :]
-            _high_err[ss, :] = error[1, :]
+            _low_err[:] = error[0, :]
+            _high_err[:] = error[1, :]
 
             # min. & max. void size in bin
             #(* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
-            _obj_size_min[ss] = _void_in_cat["rad_deg"].min()
-            _obj_size_max[ss] = _void_in_cat["rad_deg"].max()
-            _obj_in_cat[ss] = len(_void_in_cat.index)
+            _obj_size_min[0] = _void_in_cat["rad_deg"].min()
+            _obj_size_max[0] = _void_in_cat["rad_deg"].max()
+            _obj_in_cat[0] = len(_void_in_cat.index)
+            
+            ds = xr.Dataset(
+                {
+                    "mean": (["radius"], _mean),
+                    "lowerr": (["radius"], _low_err),
+                    "higherr": (["radius"], _high_err),
+                },
+                coords={
+                    "radius": self.profiles["radii"],
+                    "size_min": _obj_size_min,
+                    "size_max": _obj_size_max,
+                    "nr_of_obj": _obj_in_cat,
+                },
+            )
 
-        ds = xr.Dataset(
-            {
-                "mean": (list(cats_dict.keys()) + ["radius"], _mean),
-                "lowerr": (list(cats_dict.keys()) + ["radius"], _low_err),
-                "higherr": (list(cats_dict.keys()) + ["radius"], _high_err),
-            },
-            coords={
-                "sigma": cats_dict["sigma"],
-                "radius": self.profiles["radii"],
-                "size_min": (list(cats_dict.keys()), _obj_size_min),
-                "size_max": (list(cats_dict.keys()), _obj_size_max),
-                "nr_of_obj": (list(cats_dict.keys()), _obj_in_cat),
-            },
-        )
         if save:
             dir_out = '/'.join(self.dataset_file.split("/")[:-1])
             if self.field_conversion is None:
                 self.field_conversion = ''
-            file_name = self.field_conversion + '_' + \
+            filename = self.field_conversion + '_' + \
                 ''.join(self.dataset_file.split("/")[-1].split(".")[:-1])
-            print(f"Save profile statistics in -> {dir_out}/profile_{file_name}.nc")
-            ds.to_netcdf(f"{dir_out}/profile_{file_name}.nc")
+            filename = f"{dir_out}/profile_{filename}.nc"
+            print(f"Save profile statistics in -> {filename}")
+            ds.to_netcdf(filename)
 
     def _trim_edges(
         self, voids: pd.DataFrame, radii_max: float, npix: int
@@ -274,8 +394,7 @@ class Voids:
         Remove voids whose radii goes over the simulation boundary.
 
         Args:
-            radii_max:
-            npix:
+            radii_max: npix:
                 Nr. of pixels on edge of SkyMap
         """
         return object_selection.trim_edges(voids, radii_max, npix)

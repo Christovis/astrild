@@ -8,14 +8,19 @@ import yaml
 import numpy as np
 import pandas as pd
 
+from halotools.mock_observables import tpcf_multipole
+
 from wys_ars.particles.ecosmog import Ecosmog
 from wys_ars.particles.utils import SubFind
 from wys_ars.particles.utils import Rockstar
+from wys_ars.particles.utils import TPCF
 from wys_ars.utils.arepo_hdf5_library import read_hdf5
+from wys_ars import io as IO
 
 dir_src = Path(__file__).parent.absolute()
 default_halo_stats_config = dir_src / "configs/halo_stats.yaml"
 
+dm_particle_mass = 7.98408e10 #[Msun/h]
 
 class HalosWarning(BaseException):
     pass
@@ -36,8 +41,10 @@ class Halos:
     Methods:
         get_subfind_halo_data:
         get_subfind_stats:
+        get_subfind_tpcf:
         get_rockstar_halo_data:
         get_rockstar_stats:
+        get_rockstar_tpcf:
     """
 
     def __init__(self, simulation: Type[Ecosmog]):
@@ -47,7 +54,7 @@ class Halos:
 
     def get_subfind_stats(
         self, config_file: str = default_halo_stats_config, save: bool = True,
-    ):
+    ) -> None:
         """
         Compute statistics of halos identified with SubFind from one or a
         collection of simulations.
@@ -97,7 +104,6 @@ class Halos:
         else:
             self.statistics = statistics
 
-
     def get_subfind_halo_data(self, snap_nr: int) -> read_hdf5.snapshot:
         """ """
         snapshot = read_hdf5.snapshot(
@@ -117,6 +123,9 @@ class Halos:
                 "GroupFirstSub",
                 "GroupLenType",
                 "SubhaloVmax",
+                "SubhaloPos",
+                "SubhaloVel",
+                "SubhaloMass",
             ]
         )
         if snapshot.cat["n_groups"] == 0:
@@ -137,10 +146,23 @@ class Halos:
         """
         Filter halos with '> nr_particles' particles
         """
-        idx = snapshot.cat["GroupLenType"][:, 1] > nr_particles
+        min_mass = dm_particle_mass * nr_particles
+        
+        mass = snapshot.cat["Group_M_Crit200"][:] * snapshot.header.hubble  # [Msun/h]
+        idx_groups = mass > min_mass
+        
+        mass = snapshot.cat["SubhaloMass"][:] * snapshot.header.hubble  # [Msun/h]
+        idx_subhalos = mass > min_mass
+
+        # idx = snapshot.cat["GroupLenType"][:, 1] > nr_particles
         # idx = snapshot.cat["Group_M_Crit200"][:] > \
         #    100*(snapshot.header.massarr[1] * 1e10 / snapshot.header.hubble)
         for key, value in snapshot.cat.items():
+            if "Group" in key:
+                idx = idx_groups
+            elif ("Subhalo" in key) and (len(snapshot.cat[key]) > len(idx_groups)):
+                idx = idx_subhalos
+
             if len(value.shape) == 0:
                 continue
             elif len(value.shape) == 1:
@@ -152,11 +174,80 @@ class Halos:
                     f"The group data {key} has weird dimensions: {value.shape}."
                 )
         return snapshot
+    
+    def get_subfind_tpcf(
+        self,
+        subfind_type: str,
+        config: dict,
+        save: bool = True,
+    ) -> None:
+        """
+        Compute real- and redshift-space TPCF for halos. This computation is
+        done using halotools.
+
+        https://halotools.readthedocs.io/en/latest/index.html
+
+        Args:
+            subfind_type: ["Group", "Subhalo"]
+            config:
+            save:
+                wether to save results to file.
+        """
+        tpcf = {}
+        for l in config["multipoles"]:
+            tpcf[str(l)] = {}
+        multipoles = config["multipoles"]
+        del config["multipoles"]
+
+        for snap_nr in self.sim.dir_nrs:
+            snapshot = self.get_subfind_halo_data(snap_nr)
+            
+            if snapshot is None:
+                print(f"No sub- & halos found for snapshot {snap_nr}")
+                continue
+
+            snapshot = self.filter_resolved_subfind_halos(snapshot, 100)
+          
+            if subfind_type == "group":
+                halo_pos = snapshot.cat["GroupPos"][:] * \
+                    snapshot.header.hubble / 1e3  #[Mpc/h]
+                scale_factor = 1 / (1 + snapshot.header.redshift)
+                print("test a -------", scale_factor)
+                halo_vel = snapshot.cat["GroupVel"][:] / scale_factor #[km/s]
+            if subfind_type == "subhalo":
+                halo_pos = snapshot.cat["SubhaloPos"][:] * \
+                    snapshot.header.hubble / 1e3  #[Mpc/h]
+                halo_vel = snapshot.cat["SubhaloVel"][:]  #[km/s]
+
+            s_bins, mu_range, tpcf_s= TPCF.compute(
+                pos=halo_pos,
+                vel=halo_vel,
+                **config,
+                multipole=l,
+            )
+            for l in multipoles:
+                _tpcf = tpcf_multipole(tpcf_s, mu_range, order=l)
+                tpcf[str(l)]["snap_%d" % snap_nr] = _tpcf
+                print(l, "!!!!!!!!!!!! snap_%d" % snap_nr, _tpcf)
+        
+        tpcf["s_bins"] = s_bins
+
+        if save:
+            IO.save_tpcf(
+                self.sim.dirs['out'],
+                config,
+                multipoles,
+                "subfind",
+                "_"+subfind_type,
+                tpcf,
+            )
+        else:
+            self.tpcf = tpcf
 
     def get_rockstar_stats(
         self,
-        snap_nrs: Optional[List[int]] = None,
         config_file: str = default_halo_stats_config,
+        snap_nrs: Optional[List[int]] = None,
         save: bool = True,
     ):
         """
@@ -224,6 +315,70 @@ class Halos:
             self.statistics = statistics
 
 
+    def get_rockstar_tpcf(
+        self,
+        config: dict,
+        snap_nrs: Optional[List[int]] = None,
+        save: bool = True,
+    ) -> None:
+        """
+        Compute real- and redshift-space TPCF for halos. This computation is
+        done using halotools.
+
+        https://halotools.readthedocs.io/en/latest/index.html
+
+        Args:
+            config:
+            save:
+                wether to save results to file.
+        """
+        tpcf = {}
+        for l in config["multipoles"]:
+            tpcf[str(l)] = {}
+        multipoles = config["multipoles"]
+        del config["multipoles"]
+        
+        if snap_nrs is None:
+            snap_nrs = self.sim.dir_nrs
+
+        for snap_nr in snap_nrs:
+            snapshot = self.get_rockstar_halo_data(
+                self.sim.files["halos"][str(snap_nr)]
+            )
+            
+            if snapshot is None:
+                print(f"No sub- & halos found for snapshot {snap_nr}")
+                continue
+
+            snapshot = self.filter_resolved_rockstar_halos(snapshot, 100)
+          
+            halo_pos = snapshot[["x", "y", "z"]].values  #[Mpc/h]
+            halo_vel = snapshot[["vx", "vy", "vz"]].values  #[km/s]
+
+            s_bins, mu_range, tpcf_s= TPCF.compute(
+                pos=halo_pos,
+                vel=halo_vel,
+                **config,
+            )
+            for l in multipoles:
+                _tpcf = tpcf_multipole(tpcf_s, mu_range, order=l)
+                tpcf[str(l)]["snap_%d" % snap_nr] = _tpcf
+        
+        tpcf["s_bins"] = s_bins
+
+        if save:
+            IO.save_tpcf(
+                self.sim.dirs['out'],
+                config,
+                multipoles,
+                "rockstar",
+                "",
+                tpcf,
+            )
+        else:
+            self.tpcf = tpcf
+    
+
     def get_rockstar_halo_data(self, files_path: list) -> pd.DataFrame:
         """ """
         # TODO: currently only one directory supported, e.g. 012
@@ -247,7 +402,8 @@ class Halos:
         """
         Filter halos with '> nr_particles' particles
         """
-        return snapshot[snapshot["num_p"] > nr_particles]
+        min_mass = dm_particle_mass * nr_particles
+        return snapshot[snapshot["m200c"] > min_mass]
 
 
     def _sort_statistics(self, statistics: dict) -> List[str]:

@@ -55,6 +55,7 @@ def from_map(
         profiles["values"].append(profile["values"])
     profiles["values"] = np.asarray(profiles["values"])
     profiles["radii"] = profile["radii"]
+    print("single void profiles\n", profiles["values"])
     return profiles
 
 def to_file(self, ray_z, ray_nrs, finder: str, sigmas, profiles_radii, args) -> None:
@@ -108,7 +109,7 @@ def profiling(
         delta_eta:
             The annulus thickness normalised against ith void radius.
         extend:
-        nr_profile_bins:
+            nr_profile_bins:
     """
     prof_radius = np.ceil(obj_radius * extend).astype(int)
     # distance of every pixel to centre
@@ -140,6 +141,15 @@ def profiling(
     profile["radii"] = r
     # Radial bin values
     profile["values"] = annulus_value / annulus_count
+    
+    if np.isnan(profile["values"]).any():
+        print(
+            prof_radius,
+            nr_profile_bins,
+            annulus_value,
+            annulus_count,
+            obj_pos,
+        )
     return profile
 
 
@@ -180,7 +190,6 @@ def mean_profile(profiles, object_radius_pn, extend, thickness, n_bins):
 
     # now need to turn kappa_i into mean kappa values
     kappas = kappa_i / (np.sum(radial_bins_num ** 2))
-
     return kappas
 
 
@@ -216,7 +225,7 @@ def interpolate(
 
 
 def mean_and_interpolate(
-    profile, objects_rad: float, extend: float, nr_rad_bins: int,
+    profile: np.ndarray, objects_rad: float, extend: float, nr_rad_bins: int,
 ) -> np.array:
     """
     Get the mean profile of all the profiles of objects, which are weighted
@@ -338,11 +347,14 @@ def bootstrapping(
     error = np.zeros((nr_rad_bins, 2))
     for i in range(nr_rad_bins):
         error[i] = [
-            np.percentile(mean_profile_list.T[i], 16),  # lower bound
-            np.percentile(mean_profile_list.T[i], 84),  # higher bound
+            #np.percentile(mean_profile_list.T[i], 16),  # lower bound
+            #np.percentile(mean_profile_list.T[i], 84),  # higher bound
+            np.std(mean_profile_list.T[i]),  # lower bound
+            np.std(mean_profile_list.T[i]),  # higher bound
         ]
 
-    e = np.array([mean_profile - error.T[0], error.T[1] - mean_profile])
+    #e = np.array([mean_profile - error.T[0], error.T[1] - mean_profile])
+    e = np.array([error.T[0], error.T[1]])
     e = np.squeeze(e)  # remove single dimensional entries
     return e
 

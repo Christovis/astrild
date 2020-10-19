@@ -66,10 +66,10 @@ class SkyMap:
     @classmethod
     def from_file(
         cls,
-        npix: int,
         theta: float,
         quantity: str,
         dir_in: str,
+        npix: Optional[int] = None,
         map_file: Optional[str] = None,
         convert_unit: bool = True,
     ) -> "SkyMap":
@@ -93,8 +93,14 @@ class SkyMap:
                 )
             elif map_file.split(".")[-1] == "npy":
                 map_array = np.load(map_file)
-                dirs = {"sim": dir_in}
-                return cls.SkyMap(npix, theta, quantity, dirs, map_array, map_file)
+                return cls.from_array(
+                    map_array.shape[0], theta, quantity, dir_in, map_array, map_file
+                )
+            elif map_file.split(".")[-1] == "fits":
+                map_array = ConvergenceMap.load(map_file, format="fits").data
+                return cls.from_array(
+                    map_array.shape[0], theta, quantity, dir_in, map_array, map_file
+                )
         else:
             raise SkyMapWarning('There is no file being pointed at')
     
@@ -173,14 +179,20 @@ class SkyMap:
         nbins: int,
         field_conversion: str,
         of: str="orig",
+        limits: Optional[tuple] = None,
     ) -> pd.DataFrame:
         if field_conversion == "normalize":
             _map = self.data[of] - np.mean(self.skymap.data[of])
         else:
             _map = self.data[of]
 
-        lower_bound = np.percentile(self.data[of], 5)  #np.min(self.data[of])
-        upper_bound = np.percentile(self.data[of], 95)  #np.max(self.data[of])
+        if limits is None:
+            lower_bound = np.percentile(self.data[of], 5)  #np.min(self.data[of])
+            upper_bound = np.percentile(self.data[of], 95)  #np.max(self.data[of])
+        else:
+            lower_bound = min(limits)
+            upper_bound = max(limits)
+
         map_bins = np.arange(
             lower_bound, upper_bound, (upper_bound - lower_bound) / nbins,
         )
@@ -189,8 +201,6 @@ class SkyMap:
         
         _hist, _kappa = np.histogram(_kappa, bins=nbins, density=False)
         _kappa = (_kappa[1:] + _kappa[:-1]) / 2
-        print(_kappa.min(), _kappa.max())
-        print(_hist, np.sum(_hist))
         peak_counts_dic = {"kappa": _kappa, "counts": _hist}
         peak_counts_df = pd.DataFrame(data=peak_counts_dic)
         return peak_counts_df
@@ -219,12 +229,12 @@ class SkyMap:
                         _map, self.opening_angle, **args
                     )
                     self.data[on + "_gfilter"] = _map
-                if fil == "compensated_gaussian":
+                if fil == "gaussian_truncated":
                     self.smoothing_length = args["theta_i"]
                     _map = Filters.compensated_gaussian_filter(
                         _map, self.opening_angle, **args
                     )
-                    self.data[on + "_gtfiler"] = _map
+                    self.data[on + "_gtfilter"] = _map
         else:
             raise SkyMapWarning("Not yet implemented")
 
@@ -247,7 +257,7 @@ class SkyMap:
                 self.npix x self.npix np.array containing the GSN
         """
         theta_pix = 60 * self.opening_angle / self.npix
-        std_pix = np.sqrt(std ** 2 / 2 * 1.0 / theta_pix ** 2 * 1.0 / ngal)
+        std_pix = 0.007 #np.sqrt(std ** 2 / (2*theta_pix*ngal))
         if rnd_seed is None:
             self.data["gsn"] = np.random.normal(
                 loc=0, scale=std_pix, size=[self.npix, self.npix],
@@ -257,6 +267,7 @@ class SkyMap:
             self.data["gsn"] = rg.normal(
                 loc=0, scale=std_pix, size=[self.npix, self.npix],
             )
+        print(f"The GSN map sigma is {np.std(self.data['gsn'])}", std_pix)
 
     def add_galaxy_shape_noise(self, on: str = "orig") -> np.ndarray:
         """
