@@ -23,7 +23,9 @@ class Filters:
         img = img.smooth(scale_angle=theta_i * un.arcmin, kind="gaussian",)
         return img.data
 
-    def gaussian_low_pass_filter(img, kernel_width):
+    def gaussian_low_pass_filter(
+        img: np.ndarray, theta: float, theta_i: float,
+    ) -> np.ndarray:
         """
         Gaussian low-pass filter
         
@@ -34,14 +36,16 @@ class Filters:
         """
         lowpass = ndimage.gaussian_filter(
             img,
-            sigma=kernel_width,
+            sigma=theta_i,
             order=0,
             output=np.float64,
             mode='nearest',
         )
         return lowpass
-
-    def gaussian_high_pass_filter(img, kernel_width):
+    
+    def gaussian_high_pass_filter(
+        img: np.ndarray, theta: float, theta_i: float,
+    ) -> np.ndarray:
         """
         Gaussian high-pass filter
         
@@ -50,12 +54,12 @@ class Filters:
             theta: edge-lenght of field-of-view [arcmin]
             theta_i: smoothing kernel width [arcmin]
         """
-        lowpass = ndimage.gaussian_filter(img, kernel_width)
+        lowpass = ndimage.gaussian_filter(img, sigma=theta_i)
         img -= lowpass
         return img
 
     def gaussian_third_derivative_filter(
-        img: np.ndarray, sigma: float, direction: int,
+        img: np.ndarray, theta: float, theta_i: float, direction: int,
     ) -> np.ndarray:
         """
         Omni-directional third derivative gaussian kernel (also called DGD3 filter),
@@ -68,13 +72,13 @@ class Filters:
             sigma: ideally it should be the width of halo, R200. units are [pix]
         """
         gauss_1 = ndimage.gaussian_filter(
-            img, sigma*0.5, order=3*direction, output=np.float64, mode='nearest'
+            img, theta_i*0.5, order=3*direction, output=np.float64, mode='nearest'
         )
         gauss_2 = ndimage.gaussian_filter(
-            img, sigma*1.0, order=3*direction, output=np.float64, mode='nearest'
+            img, theta_i*1.0, order=3*direction, output=np.float64, mode='nearest'
         )
         gauss_3 = ndimage.gaussian_filter(
-            img, sigma*2.0, order=3*direction, output=np.float64, mode='nearest'
+            img, theta_i*2.0, order=3*direction, output=np.float64, mode='nearest'
         )
         return gauss_1 - gauss_2 + gauss_3
 

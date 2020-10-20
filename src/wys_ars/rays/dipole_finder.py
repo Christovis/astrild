@@ -13,7 +13,7 @@ from lenstools import ConvergenceMap
 from wys_ars.rays.utils import object_selection
 from wys_ars.simulation import Simulation
 from wys_ars.rays.skymap import SkyMap
-from wys_ars.rays.utils import filters as Filters
+from wys_ars.rays.utils.filters import Filters
 from wys_ars.profiles import profile_2d as Profiles2D
 from wys_ars.io import IO
 
@@ -54,7 +54,8 @@ class DipoleFinder:
                 DGD3 Filter width (recommended 5 or 200)
         """
         self.skymap = skymap
-        self.smoothing_length = kernel_width
+        self.kernel_width = kernel_width
+        self.direction = direction
 
 
     def find_dipoles(
@@ -73,20 +74,31 @@ class DipoleFinder:
         self.on = on
         
         # prepare map for dipole detection
-        _map = Filters.gaussian_high_pass_filter(
-            skymap.data[on], kernel_width
-        )
-        _map = Filters.gaussian_third_derivative_filter(
-            _map, kernel_width, direction
-        )
-        self.skymap.data["orig_hpf_dgd3f_lpf"] = Filters.gaussian_low_pass_filter(
-            np.abs(_map), kernel_width
-        )
-        
-        _map = self.skymap.data[on]
-        _map = ConvergenceMap(data=_map, angle=self.skymap.opening_angle*un.deg)
-        
+        filter_dsc = {
+            "gaussian_high_pass_filter": {
+                "abbrev": "ghpf",
+                "theta_i": self.kernel_width,
+            },
+            "gaussian_third_derivative_filter": {
+                "abbrev": "g3df",
+                "theta_i": self.kernel_width,
+                "direction": self.direction,
+            }
+        }
+        _map = self.skymap.convolution(filter_dsc, on="orig", rtn=True)
+        filter_dsc = {
+            "gaussian_low_pass_filter": {
+                "abbrev": "glpf",
+                "theta_i": self.kernel_width,
+            },
+        }
+        self.skymap.data[on] = self.skymap.convolution(filter_dsc, sky_array=_map, rtn=True)
         thresholds = self._get_convergence_thresholds(**thresholds_dsc)
+        
+        _map = ConvergenceMap(
+            data=self.skymap.data[on],
+            angle=self.skymap.opening_angle*un.deg
+        )
         _peaks = {}
         _peaks["sigma"], _peaks["pos"] = _map.locatePeaks(thresholds)
         _peaks["sigma"], _peaks["pos"] = self._remove_peaks_crossing_edge(**_peaks)
@@ -94,12 +106,15 @@ class DipoleFinder:
 
         # find significance of peaks
         _peaks["snr"] = self._signal_to_noise_ratio(_peaks["sigma"], _map.data)
-        self.peaks = _peaks
-        print("--------------------------", len(self.peaks["sigma"]), np.min(self.peaks["sigma"]), np.max(self.peaks["sigma"]))
+        self.data = pd.DataFrame(data=_peaks)
+        print(self.data.describe()) 
  
 
     def _get_convergence_thresholds(
-        self, on: str = "orig_hpf_dgd3f", nbins: int = 100,
+        self,
+        nbins: int = 100,
+        on: Optional[str] = None,
+        sky_arra: Optional[str] = None,
     ) -> np.array:
         """
         Define thresholds for lenstools to find peaks on convergence map.
@@ -146,7 +161,7 @@ class DipoleFinder:
             pos:
         """
         pixlen = self.skymap.opening_angle / self.skymap.npix  #[deg]
-        bufferlen = np.ceil(self.smoothing_length / (60 * pixlen))  # length of buffer zone
+        bufferlen = np.ceil(self.kernel_width / (60 * pixlen))  # length of buffer zone
         # convert degrees to pixel number
         x = pos[:, 0].value * self.skymap.npix/ self.skymap.opening_angle
         y = pos[:, 1].value * self.skymap.npix / self.skymap.opening_angle
@@ -157,7 +172,7 @@ class DipoleFinder:
         sigma = sigma[indx]
         pos = pos[indx, :]
         print(
-            f"{len(indx)} peaks were within smoothing_length of FOV edge" + \
+            f"{len(indx)} peaks were within kernel_width of FOV edge" + \
             f" and had to be removed. \n{len(sigma)} peaks are left."
         )
         return sigma, pos

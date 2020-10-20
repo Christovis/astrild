@@ -2,6 +2,7 @@ import os, sys, glob
 import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Union
+from importlib import import_module
 
 import pandas as pd
 import numpy as np
@@ -53,17 +54,26 @@ class SkyArray:
     def __init__(
         self,
         skymap: np.ndarray,
+        opening_angle: float,
+        quantity: str,
+        dirs: Dict[str, str],
+        map_file: str,
     ):
         self.data = {"orig": skymap}
+        self.npix = skymap.shape[0]
+        self.opening_angle = opening_angle
+        self.quantity = quantity
+        self.dirs = dirs
+        self.map_file = map_file
 
     @classmethod
     def from_file(
         cls,
-        theta: float,
+        map_file: str,
+        opening_angle: float,
         quantity: str,
         dir_in: str,
         npix: Optional[int] = None,
-        map_file: Optional[str] = None,
         convert_unit: bool = True,
     ) -> "SkyMap":
         """
@@ -83,19 +93,27 @@ class SkyArray:
         file_extension = map_file.split(".")[-1]
         if file_extension == "h5":
             map_df = pd.read_hdf(map_file, key="df")
-            return cls.from_dataframe(quantity, map_df, convert_unit)
+            return cls.from_dataframe(
+                map_df, opening_angle, quantity, dir_in, map_file, npix, convert_unit,
+            )
         elif file_extension in ["npy", "fits"]:
             if file_extension == "npy":
                 map_array = np.load(map_file)
             elif file_extension == "fits":
                 map_array = ConvergenceMap.load(map_file, format="fits").data
-            return cls.from_array(map_array)
+            return cls.from_array(
+                map_array, opening_angle, quantity, dir_in, map_file,
+            )
     
     @classmethod
     def from_dataframe(
         cls,
-        quantity: str,
         map_df: pd.DataFrame,
+        opening_angle: float,
+        quantity: str,
+        dir_in: str,
+        map_file: str,
+        npix: Optional[int] = None,
         convert_unit: bool = True,
     ) -> "SkyMap":
         """
@@ -111,12 +129,18 @@ class SkyArray:
         if convert_unit:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
         map_array = SkyIO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
-        return cls.from_array(map_array)
+        return cls.from_array(
+            map_array, opening_angle, quantity, dir_in, map_file,
+        )
     
     @classmethod
     def from_array(
         cls,
         map_array: np.array,
+        opening_angle: float,
+        quantity: str,
+        dir_in: str,
+        map_file: str,
     ) -> "SkyMap":
         """
         Initialize class by reading the skymap data from np.ndarray.
@@ -128,7 +152,8 @@ class SkyArray:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
         """
-        return cls(map_array)
+        dirs = {"sim": dir_in}
+        return cls(map_array, opening_angle, quantity, dirs, map_file)
     
     def pdf(self, nbins: int, of: str="orig") -> dict:
         _pdf = {}
@@ -171,7 +196,9 @@ class SkyArray:
     def convolution(
         self,
         filter_dsc: dict,
-        on: str,
+        on: Optional[str] = None,
+        sky_array: Optional[np.ndarray] = None,
+        rtn: bool = False,
     ) -> None:
         """
         Convolve kernel (filter_dsc) over skymap image (on)
@@ -181,23 +208,30 @@ class SkyArray:
             on:
                 skymap image identifier
         """
-        if self.quantity in ["kappa_2", "isw_rs"]:
-            if on == "orig_gsn":
-                _map = self.add_galaxy_shape_noise()
-            elif on == "orig":
-                _map = self.data["orig"]
-
-            for filter_name, args in filter_dsc.items():
-                abbriv = args["abbrivation"]
-                del args["abbrivation"]
-                self.smoothing_length = args["theta_i"]
-
-                clas = getattr(module, "Filters")
-                fct = getattr(clas, filter_name)
-                _map = fct(_map, self.opening_angle, **args)
-                self.data[f"{on}_{abbriv}"] = _map
+        assert self.quantity in ["kappa_2", "isw_rs"], "Not yet implemented"
+        # load rays/utils/filters.py package for dynamic function call
+        module = import_module("wys_ars.rays.utils")
+        if on == "orig_gsn":
+            _map = self.add_galaxy_shape_noise()
+        elif sky_array is None:
+            _map = self.data[on]
         else:
-            raise SkyMapWarning("Not yet implemented")
+            _map = sky_array
+
+        map_name = [on]
+        for filter_name, args in filter_dsc.items():
+            abbrev = args["abbrev"]
+            del args["abbrev"]
+            self.smoothing_length = args["theta_i"]
+
+            clas = getattr(module, "Filters")
+            fct = getattr(clas, filter_name)
+            _map = fct(_map, self.opening_angle, **args)
+            map_name.append(abbrev)
+        if rtn:
+            return _map
+        else:
+            self.data[("_").join(map_name)] = _map
 
     def create_galaxy_shape_noise(
         self, std: float, ngal: float, rnd_seed: Optional[int] = None,

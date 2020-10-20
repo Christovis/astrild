@@ -8,6 +8,7 @@ import pandas as pd
 from astropy import units as un
 import lenstools
 from lenstools import ConvergenceMap
+import healpy as hp
 
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.skyio import SkyIO
@@ -22,21 +23,21 @@ class PowerSpectrum2D:
     Attributes:
 
     Methods:
-        compute:
+        from_array:
+        from_healpix:
+        from_namaster:
+        create_healpix:
     """
 
-    def __init__(self, l: np.array, P: np.array, skymap: Type[SkyMap], on: str):
-        self.l = l
+    def __init__(self, l: np.array, P: np.array):
+        self.ell = l
         self.P = P
-        self.skymap = skymap
-        self.on = on
 
     @classmethod
     def from_array(
         cls,
         skymap: np.ndarray,
         multipoles: Union[List[float], np.array] = np.arange(200.0,50000.0,200.0),
-        rtn: bool = False,
     ) -> "PowerSpectrum2D":
         """
         Args:
@@ -52,54 +53,53 @@ class PowerSpectrum2D:
     @classmethod
     def from_healpix(
         cls,
-        skymap: np.ndarray,
-        rtn: bool = False,
+        skymap: SkyMap,
+        of: str = "orig",
     ) -> "PowerSpectrum2D":
         """
-        Get power spectrum from Healpix map.
-        Useful for whole-sky maps.
+        Get power spectrum from full-sky Healpix map.
 
         Args:
         """
-        skymap /= (1e6 * 2.7255)            # transform [muK] to [-]
-        # get healpix field properties
-        nside = hp.get_nside(skymap)
-        npix = hp.nside2npix(nside)
         # measure full-sky
-        P = hp.anafast(skymap)
-        return cls(l, P)
+        Cl = hp.anafast(skymap.data[of])
+        ell = np.arange(len(Cl))
+        return cls(ell, Cl)
     
     @classmethod
     def from_namaster(
         cls,
-        skymap: np.ndarray,
-        maks: Optional[np.ndarray] = None,
+        skymap: SkyMap,
+        of: str = "orig",
     ) -> "PowerSpectrum2D":
         """
-        Get power spectrum from NaMaster map.
-        Useful for partial-sky maps.
+        Get power spectrum from spherical NaMaster map,
+        but flat-sky maps also possible.
 
         Args:
             skymap:
             mask:
         """
-        # create NaMaster field
-        skymap = nmt.NmtField(mask, [skymap])
         # chose multiploes for measurement
-        b = nmt.NmtBin.from_nside_linear(nside, 4)
-        ell = b.get_effective_ells()
+        bins = nmt.NmtBin.from_nside_linear(skymap.nside, 4)
+        ell = bins.get_effective_ells()
         # measure full-sky
-        P = nmt.compute_full_master(skymap, skymap, bins)
-        return cls(ell, P)
+        Cl = nmt.compute_full_master(skymap.data[of], skymap.data[of], bins)
+        return cls(ell, Cl)
 
-    def create_healpix(self, rnd_seed: int) -> np.ndarray:
+    def create_healpix(
+        self,
+        nside: Optional[int]=None,
+        rnd_seed: Optional[int]=None,
+    ) -> np.ndarray:
         """
         Generate Healpix map from power spectrum.
         """
-        np.random.seed(rnd_seed)
-        cl = np.sqrt(self.Cl)              # Cai's finding on 11/05/20
-        skymap = hp.synfast(cl, nside)
-        skymap = hp.pixelfunc.remove_monopole(skymap)
+        if nside is None:
+            nside = self.nside
+        if nside is not None:
+            np.random.seed(rnd_seed)
+        skymap = hp.synfast(self.P, nside)
         return skymap
 
     def to_file(self, dir_out: str, extention: str = "h5") -> None:

@@ -18,7 +18,6 @@ import pymaster as nmt
 
 from wys_ars.simulation import Simulation
 from wys_ars.rays.utils import Filters
-from wys_ars.rays.skys.sky_namaster import SkyNamaster
 from wys_ars.rays.skys.sky_utils import SkyUtils
 from wys_ars.rays.skyio import SkyIO
 from wys_ars.io import IO
@@ -27,11 +26,11 @@ dir_src = Path(__file__).parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
 c_light = 299792.458  # in km/s
 
-class SkyHealpixWarning(BaseException):
+class SkyNamasterWarning(BaseException):
     pass
 
 
-class SkyHealpix:
+class SkyNamaster:
     """
     The sky-map is constructed through multiple ray-tracing simulations
     run with RayRamses. This class analyzes the 2D map that contains
@@ -55,6 +54,7 @@ class SkyHealpix:
     def __init__(
         self,
         skymap: np.ndarray,
+        npix: int,
         opening_angle: float,
         quantity: str,
         dirs: Dict[str, str],
@@ -72,10 +72,10 @@ class SkyHealpix:
     def from_file(
         cls,
         map_file: str,
+        npix: int,
         opening_angle: float,
         quantity: str,
         dir_in: str,
-        nside: Optional[int] = None,
         convert_unit: bool = True,
     ) -> "SkyMap":
         """
@@ -96,23 +96,23 @@ class SkyHealpix:
         if file_extension == "h5":
             map_df = pd.read_hdf(map_file, key="df")
             return cls.from_dataframe(
-                map_df, opening_angle, quantity, dir_in, map_file, nside, convert_unit,
+                map_df, npix, opening_angle, quantity, dir_in, map_file, convert_unit,
             )
         elif file_extension == "fits":
             map_array = hp.read_map(map_file)
             return cls.from_array(
-                map_array, opening_angle, quantity, dir_in, map_file, nside
+                map_array, npix, opening_angle, quantity, dir_in, map_file
             )
     
     @classmethod
     def from_dataframe(
         cls,
         map_df: pd.DataFrame,
+        npix: int,
         opening_angle: float,
         quantity: str,
         dir_in: str,
         map_file: str,
-        nside: Optional[int] = None,
         convert_unit: bool = True,
     ) -> "SkyMap":
         """
@@ -129,13 +129,14 @@ class SkyHealpix:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
         map_array = SkyIO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
         return cls.from_array(
-            map_array, opening_angle, quantity, dir_in, map_file,
+            map_array, npix, opening_angle, quantity, dir_in, map_file,
         )
     
     @classmethod
     def from_array(
         cls,
         map_array: np.array,
+        npix: int,
         opening_angle: float,
         quantity: str,
         dir_in: str,
@@ -153,21 +154,13 @@ class SkyHealpix:
         """
         dirs = {"sim": dir_in}
         map_array = hp.ma(map_array)  # mask out bad values (e.g Nan)
-        return cls(map_array, opening_angle, quantity, dirs, map_file)
+        return cls(map_array, npix, opening_angle, quantity, dirs, map_file)
 
     def to_namaster(self):
         """
         Transform SkyHealpix to SkyNamaster.
         """
-        sky_array = nmt.NmtField(self.data["mask"], [self.data[which]])
-        return SkyNamaster.from_array(
-            sky_array,
-            self.npix,
-            self.opening_angle,
-            self.quantity,
-            self.dirs,
-            self.map_file,
-        )
+        f_0 = nmt.NmtField(self.data["mask"], [self.data[which]])
     
     def create_cmb(
         self,
