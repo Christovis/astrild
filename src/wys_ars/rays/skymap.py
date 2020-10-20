@@ -8,26 +8,25 @@ import numpy as np
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage.filters import convolve
 
-import healpy as hp
 import astropy
 from astropy.io import fits
 from astropy import units as un
-import lenstools
-from lenstools import ConvergenceMap
 
 from wys_ars.simulation import Simulation
-from wys_ars.rays.utils import filters as Filters
-from wys_ars import io as IO
+from wys_ars.rays.utils import Filters
+from wys_ars.rays.skys import SkyArray
+from wys_ars.rays.skys import SkyHealpix
+from wys_ars.rays.skyio import SkyIO
+from wys_ars.io import IO
 
 dir_src = Path(__file__).parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
-c_light = 299792.458  # in km/s
 
 class SkyMapWarning(BaseException):
     pass
 
 
-class SkyMap:
+class SkyMap(SkyType):
     """
     The sky-map is constructed through multiple ray-tracing simulations
     run with RayRamses. This class analyzes the 2D map that contains
@@ -41,27 +40,22 @@ class SkyMap:
 
     Methods:
         from_file:
-        pdf:
-        wl_peak_counts:
-        add_galaxy_shape_noise:
-        create_galaxy_shape_noise:
-        smoothing:
     """
     def __init__(
         self,
+        skymap: Union[SkyArray, SkyHealpix],
         npix: int,
         opening_angle: float,
         quantity: str,
         dirs: Dict[str, str],
-        mapp: np.ndarray,
         map_file: str,
     ):
-        self.map_file = map_file
-        self.data = {"orig": mapp}
-        self.dirs = dirs
+        self.data = skymap
         self.npix = npix
-        self.quantity = quantity
         self.opening_angle = opening_angle
+        self.quantity = quantity
+        self.dirs = dirs
+        self.map_file = map_file
 
     @classmethod
     def from_file(
@@ -72,6 +66,7 @@ class SkyMap:
         npix: Optional[int] = None,
         map_file: Optional[str] = None,
         convert_unit: bool = True,
+        sky_type: str = "array",
     ) -> "SkyMap":
         """
         Initialize class by reading the skymap data from pandas hdf5 file
@@ -84,25 +79,34 @@ class SkyMap:
             file_dsc:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
+            sky_type:
+                Indicate what format the sky should have, as it makes different
+                operations are accessible: [healpix, array]
         """
-        if map_file is not None:
-            if map_file.split(".")[-1] == "h5":
-                map_df = pd.read_hdf(map_file, key="df")
-                return cls.from_dataframe(
+        assert sky_type in ["array", "healpix"], "The declared 'sky_type' is not known"
+        assert map_file, SkyMapWarning('There is no file being pointed at')
+
+        file_extension = map_file.split(".")[-1]
+        if file_extension == "h5":
+            map_df = pd.read_hdf(map_file, key="df")
+            if sky_type == "array":
+                skymap = SkyArray.from_dataframe(quantity, map_df, convert_unit)
+            elif sky_type == "healpix":
+                skymap = SkyHealpix.from_dataframe(
                     npix, theta, quantity, dir_in, map_df, map_file, convert_unit,
                 )
-            elif map_file.split(".")[-1] == "npy":
+        
+        elif file_extension in ["npy", "fits"]: # only possible for SkyArray
+            if file_extension == "npy":
                 map_array = np.load(map_file)
-                return cls.from_array(
-                    map_array.shape[0], theta, quantity, dir_in, map_array, map_file
-                )
-            elif map_file.split(".")[-1] == "fits":
+            elif file_extension == "fits":
                 map_array = ConvergenceMap.load(map_file, format="fits").data
-                return cls.from_array(
-                    map_array.shape[0], theta, quantity, dir_in, map_array, map_file
-                )
-        else:
-            raise SkyMapWarning('There is no file being pointed at')
+            skymap = SkyArray.from_array(
+                npix, theta, quantity, dir_in, map_array, map_file
+            )
+        
+        dirs = {"sim": dir_in}
+        return cls(skymap, npix, theta, quantity, dirs, map_file)
     
     @classmethod
     def from_dataframe(
@@ -114,6 +118,7 @@ class SkyMap:
         map_df: pd.DataFrame,
         map_file: str,
         convert_unit: bool = True,
+        sky_type: str = "array",
     ) -> "SkyMap":
         """
         Initialize class by reading the skymap data from pandas DataFrame. 
@@ -124,11 +129,19 @@ class SkyMap:
             file_dsc:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
+            sky_type:
+                Indicate what format the sky should have, as it makes different
+                operations are accessible: [healpix, array]
         """
-        if convert_unit:
-            map_df = cls._convert_code_to_phy_units(cls, quantity, map_df)
-        map_array = IO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
-        return cls.from_array(npix, theta, quantity, dir_in, map_array, map_file)
+        assert sky_type in ["array", "healpix"], "The declared 'sky_type' is not known"
+        if sky_type == "array":
+            skymap = SkyArray.from_dataframe(quantity, map_df, convert_unit)
+        elif sky_type == "healpix":
+            skymap = SkyHealpix.from_dataframe(
+                npix, theta, quantity, dir_in, map_df, map_file, convert_unit,
+            )
+        dirs = {"sim": dir_in}
+        return cls(skymap, npix, theta, quantity, dirs, map_file)
     
     @classmethod
     def from_array(
@@ -150,142 +163,9 @@ class SkyMap:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
         """
+        skymap = SkyArray.from_array(map_array)
         dirs = {"sim": dir_in}
-        return cls(npix, theta, quantity, dirs, map_array, map_file)
-    
-    def _convert_code_to_phy_units(
-        self, quantity: str, map_df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        """
-        Convert from RayRamses code units to physical units.
-        """
-        if quantity in ["shear_x", "shear_y", "deflt_x", "deflt_y", "kappa_2"]:
-            map_df.loc[:, [quantity]] /= c_light ** 2
-        elif quantity in ["isw_rs"]:
-            map_df.loc[:, [quantity]] /= c_light ** 3
-        return map_df
-   
-    #@property
-    def pdf(self, nbins: int, of: str="orig") -> dict:
-        _pdf = {}
-        _pdf["values"], _pdf["bins"] = np.histogram(
-            self.data[of], bins=nbins, density=True,
-        )
-        return _pdf
-
-    #@property
-    def wl_peak_counts(
-        self,
-        nbins: int,
-        field_conversion: str,
-        of: str="orig",
-        limits: Optional[tuple] = None,
-    ) -> pd.DataFrame:
-        if field_conversion == "normalize":
-            _map = self.data[of] - np.mean(self.skymap.data[of])
-        else:
-            _map = self.data[of]
-
-        if limits is None:
-            lower_bound = np.percentile(self.data[of], 5)  #np.min(self.data[of])
-            upper_bound = np.percentile(self.data[of], 95)  #np.max(self.data[of])
-        else:
-            lower_bound = min(limits)
-            upper_bound = max(limits)
-
-        map_bins = np.arange(
-            lower_bound, upper_bound, (upper_bound - lower_bound) / nbins,
-        )
-        _map = ConvergenceMap(data=_map, angle=self.opening_angle*un.deg)
-        _kappa, _pos = _map.locatePeaks(map_bins)
-        
-        _hist, _kappa = np.histogram(_kappa, bins=nbins, density=False)
-        _kappa = (_kappa[1:] + _kappa[:-1]) / 2
-        peak_counts_dic = {"kappa": _kappa, "counts": _hist}
-        peak_counts_df = pd.DataFrame(data=peak_counts_dic)
-        return peak_counts_df
-
-    def smoothing(
-        self,
-        filter_dsc: dict,
-        on: str,
-    ) -> None:
-        """
-        Gaussian smoothing. This should be done after adding GSN to the map.
-        Args:
-            smoothing:
-                Kernel width of the smoothing length-scale in [arcmin]
-        """
-        if self.quantity == "kappa_2":
-            if on == "orig_gsn":
-                _map = self.add_galaxy_shape_noise()
-            elif on == "orig":
-                _map = self.data["orig"]
-
-            for fil, args in filter_dsc.items():
-                if fil == "gaussian":
-                    self.smoothing_length = args["theta_i"]
-                    _map = Filters.gaussian_filter(
-                        _map, self.opening_angle, **args
-                    )
-                    self.data[on + "_gfilter"] = _map
-                if fil == "gaussian_truncated":
-                    self.smoothing_length = args["theta_i"]
-                    _map = Filters.compensated_gaussian_filter(
-                        _map, self.opening_angle, **args
-                    )
-                    self.data[on + "_gtfilter"] = _map
-        else:
-            raise SkyMapWarning("Not yet implemented")
-
-    def create_galaxy_shape_noise(
-        self, std: float, ngal: float, rnd_seed: Optional[int] = None,
-    ) -> None:
-        """
-        Galaxy Shape Noise (GSN)
-        e.g.: https://arxiv.org/pdf/1907.06657.pdf
-
-        Args:
-            std:
-                dispersion of source galaxy intrinsic ellipticity, 0.4 for LSST
-            ngal:
-                number density of galaxies, 40 for LSST; [arcmin^2]
-            rnd_seed:
-                Fix random seed, for reproducability.
-        Returns:
-            gsn_map:
-                self.npix x self.npix np.array containing the GSN
-        """
-        theta_pix = 60 * self.opening_angle / self.npix
-        std_pix = 0.007 #np.sqrt(std ** 2 / (2*theta_pix*ngal))
-        if rnd_seed is None:
-            self.data["gsn"] = np.random.normal(
-                loc=0, scale=std_pix, size=[self.npix, self.npix],
-            )
-        else:
-            rg = np.random.Generator(np.random.PCG64(rnd_seed))
-            self.data["gsn"] = rg.normal(
-                loc=0, scale=std_pix, size=[self.npix, self.npix],
-            )
-        print(f"The GSN map sigma is {np.std(self.data['gsn'])}", std_pix)
-
-    def add_galaxy_shape_noise(self, on: str = "orig") -> np.ndarray:
-        """
-        Add GSN on top of skymap.
-        
-        Args:
-            std:
-                dispersion of source galaxy intrinsic ellipticity, 0.4 for LSST
-            ngal:
-                number density of galaxies, 40 for LSST; [arcmin^2]
-            rnd_seed:
-                Fix random seed, for reproducability.
-        """
-        if self.quantity == "kappa_2":
-            self.data["orig_gsn"] = self.data["orig"] + self.data["gsn"]
-            return self.data["orig_gsn"]
-        else:
-            raise SkyMapWarning(f"GSN should not be added to {self.quantity}")
+        return cls(skymap, npix, theta, quantity, dirs, map_file)
     
     def _get_files(self, ray_nrs) -> None:
         """
@@ -305,14 +185,6 @@ class SkyMap:
                     self.dirs["sim"] + "Ray_maps_output%05d.h5" % ray_nr
                 )
     
-    def _array_to_fits(self, map_out: np.ndarray) -> astropy.io.fits:
-        """ Convert maps that in .npy format into .fits format """
-        # Convert .npy to .fits
-        data = fits.PrimaryHDU()
-        data.header["ANGLE"] = self.opening_angle # [deg]
-        data.data = map_out
-        return data
-   
     def to_file(
         self,
         dir_out: str,
@@ -355,28 +227,3 @@ class SkyMap:
         file_out = ".".join(_file)
         return file_out
     
-    def to_healpix(
-        self, ray_nrs: list = None, quantities: list = None, save: bool = True,
-    ) -> Union[None, astropy.io.fits.hdu.image.PrimaryHDU]:
-        """ """
-        if quantities is None:
-            quantities = self.map_df.columns.values
-
-        for quantity in quantities:
-            map_df = self.code2phy_units(self.map_df, quantity)
-
-            indices = hp.ang2pix(
-                self.npix,
-                map_df["the_co"].values,
-                map_df["phi_co"].values,
-                lonlat=False,
-            )
-            hpxmap = np.zeros(hp.nside2npix(self.npix), dtype=np.float)
-            indx = list(
-                set(np.arange(hp.nside2npix(self.npix))).symmetric_difference(
-                    set(np.unique(indices))
-                )
-            )
-            hpxmap[indx] = hp.UNSEEN
-            for i in range(len(map_df[quantity].values)):
-                hpxmap[indices[i]] += map_df[quantity].values[i]

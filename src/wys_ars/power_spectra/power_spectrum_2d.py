@@ -9,8 +9,9 @@ from astropy import units as un
 import lenstools
 from lenstools import ConvergenceMap
 
-from wys_ars import io as IO
 from wys_ars.rays.skymap import SkyMap
+from wys_ars.rays.skyio import SkyIO
+from wys_ars.io import IO
 
 class PowerSpectrum2DWarning(BaseException):
     pass
@@ -31,10 +32,9 @@ class PowerSpectrum2D:
         self.on = on
 
     @classmethod
-    def from_skymap(
+    def from_array(
         cls,
-        skymap: Type[SkyMap],
-        on: str,
+        skymap: np.ndarray,
         multipoles: Union[List[float], np.array] = np.arange(200.0,50000.0,200.0),
         rtn: bool = False,
     ) -> "PowerSpectrum2D":
@@ -48,6 +48,59 @@ class PowerSpectrum2D:
             )
             l, P = _map.powerSpectrum(multipoles)
         return cls(l, P, skymap, on)
+    
+    @classmethod
+    def from_healpix(
+        cls,
+        skymap: np.ndarray,
+        rtn: bool = False,
+    ) -> "PowerSpectrum2D":
+        """
+        Get power spectrum from Healpix map.
+        Useful for whole-sky maps.
+
+        Args:
+        """
+        skymap /= (1e6 * 2.7255)            # transform [muK] to [-]
+        # get healpix field properties
+        nside = hp.get_nside(skymap)
+        npix = hp.nside2npix(nside)
+        # measure full-sky
+        P = hp.anafast(skymap)
+        return cls(l, P)
+    
+    @classmethod
+    def from_namaster(
+        cls,
+        skymap: np.ndarray,
+        maks: Optional[np.ndarray] = None,
+    ) -> "PowerSpectrum2D":
+        """
+        Get power spectrum from NaMaster map.
+        Useful for partial-sky maps.
+
+        Args:
+            skymap:
+            mask:
+        """
+        # create NaMaster field
+        skymap = nmt.NmtField(mask, [skymap])
+        # chose multiploes for measurement
+        b = nmt.NmtBin.from_nside_linear(nside, 4)
+        ell = b.get_effective_ells()
+        # measure full-sky
+        P = nmt.compute_full_master(skymap, skymap, bins)
+        return cls(ell, P)
+
+    def create_healpix(self, rnd_seed: int) -> np.ndarray:
+        """
+        Generate Healpix map from power spectrum.
+        """
+        np.random.seed(rnd_seed)
+        cl = np.sqrt(self.Cl)              # Cai's finding on 11/05/20
+        skymap = hp.synfast(cl, nside)
+        skymap = hp.pixelfunc.remove_monopole(skymap)
+        return skymap
 
     def to_file(self, dir_out: str, extention: str = "h5") -> None:
         """ 

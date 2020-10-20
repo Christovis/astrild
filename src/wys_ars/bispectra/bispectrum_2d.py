@@ -9,8 +9,8 @@ from astropy import units as un
 import lenstools
 from lenstools import ConvergenceMap
 
-from wys_ars import io as IO
 from wys_ars.rays.skymap import SkyMap
+from wys_ars.io import IO
 
 class Bispectrum2DWarning(BaseException):
     pass

@@ -15,8 +15,7 @@ from wys_ars.simulation import Simulation
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.utils import filters as Filters
 from wys_ars.profiles import profile_2d as Profiles2D
-from wys_ars import io as IO
-
+from wys_ars.io import IO
 
 class DipoleFinderWarning(BaseException):
     pass
@@ -57,16 +56,6 @@ class DipoleFinder:
         self.skymap = skymap
         self.smoothing_length = kernel_width
 
-        _map = Filters.gaussian_high_pass_filter(
-            skymap.data[on], kernel_width
-        )
-        _map = Filters.gaussian_third_derivative_filter(
-            _map, kernel_width, direction
-        )
-        self.skymap.data["orig_hpf_dgd3f_lpf"] = Filters.gaussian_low_pass_filter(
-            np.abs(_map), kernel_width
-        )
-
 
     def find_dipoles(
         self,
@@ -82,6 +71,18 @@ class DipoleFinder:
         Returns:
         """
         self.on = on
+        
+        # prepare map for dipole detection
+        _map = Filters.gaussian_high_pass_filter(
+            skymap.data[on], kernel_width
+        )
+        _map = Filters.gaussian_third_derivative_filter(
+            _map, kernel_width, direction
+        )
+        self.skymap.data["orig_hpf_dgd3f_lpf"] = Filters.gaussian_low_pass_filter(
+            np.abs(_map), kernel_width
+        )
+        
         _map = self.skymap.data[on]
         _map = ConvergenceMap(data=_map, angle=self.skymap.opening_angle*un.deg)
         

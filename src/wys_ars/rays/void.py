@@ -13,7 +13,7 @@ from wys_ars.rays.utils import object_selection
 from wys_ars.simulation import Simulation
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.profiles import profile_2d as Profiles2D
-from wys_ars import io as IO
+from wys_ars.io import IO
 
 
 class VoidsWarning(BaseException):

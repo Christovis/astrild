@@ -10,7 +10,6 @@ from halotools import mock_observables as mo
 from nbodykit.lab import *
 
 from wys_ars.utils.arepo_hdf5_library import read_hdf5
-from wys_ars import io as IO
 
 
 class SubFind:

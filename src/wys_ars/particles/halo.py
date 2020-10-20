@@ -15,7 +15,7 @@ from wys_ars.particles.utils import SubFind
 from wys_ars.particles.utils import Rockstar
 from wys_ars.particles.utils import TPCF
 from wys_ars.utils.arepo_hdf5_library import read_hdf5
-from wys_ars import io as IO
+from wys_ars.io import IO
 
 dir_src = Path(__file__).parent.absolute()
 default_halo_stats_config = dir_src / "configs/halo_stats.yaml"

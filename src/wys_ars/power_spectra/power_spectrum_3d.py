@@ -7,8 +7,8 @@ import pandas as pd
 
 from nbodykit.lab import *
 
-from wys_ars import io as IO
 from wys_ars.simulation import Simulation
+from wys_ars.io import IO
 
 
 class PowerSpectrum3DWarning(BaseException):

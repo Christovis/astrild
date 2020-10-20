@@ -14,7 +14,7 @@ from lenstools import ConvergenceMap
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.voids.tunnels import halo
 from wys_ars.rays.voids.tunnels import textFile
-from wys_ars import io as IO
+from wys_ars.io import IO
 
 this_file_path = Path(__file__).parent.absolute()
 

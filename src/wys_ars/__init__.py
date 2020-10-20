@@ -8,3 +8,4 @@ from . import visuals
 
 from .simcoll import SimulationCollection
 from .simulation import Simulation
+from .io import IO
