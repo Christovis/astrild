@@ -55,8 +55,8 @@ class SimulationCollection:
     @classmethod
     def from_file(
         cls,
-        config_file: str = default_file_config,
-        config_file_df: str = default_config_file_particle,
+        config_file: str,
+        config_file_df: str,
     ) -> "SimulationCollection":
         """
         Initialize SimulationCollection from path to config files.
@@ -82,9 +82,9 @@ class SimulationCollection:
                 "The file 'ray_snapshot_info.h5' does note exist"
             )
         if sim_args["type"] == "particles":
-            config = pd.read_hdf(default_config_file_particle, key="df")
+            config = pd.read_hdf(config_file_df)#, key="df")
         elif sim_args["type"] == "rays":
-            config = pd.read_hdf(default_config_file_ray, key="df")
+            config = pd.read_hdf(config_file_df)#, key="df")
         
         return SimulationCollection(config, sims)
 
@@ -238,16 +238,19 @@ class SimulationCollection:
         integration_range: dict,
         ray_file_root: str = "Ray_maps_output%05d.h5",
         sim_folder_root: str = "box%d",
-        z_src: float = None,
-        z_src_shift: float = None,
+        z_src: Optional[float] = None,
+        z_src_shift: Optional[float] = None,
+        rm_ray: Optional[dict] = None,
     ) -> None:
         """
         Adds different ray-tracing outputs together. This can give you the
         integrated ray-tracing quantities between arbitrary redshifts along
         the ligh-cone.
+
+        Args:
         """
         # sim_folder_root = self.dirs["lc"] + sim_folder_root
-        box_ray_nrs = self._get_box_and_ray_nrs(integration_range)
+        box_ray_nrs = self._get_box_and_ray_nrs(integration_range, rm_ray)
         # loop over simulations in collection
         first = True
         for sim_idx, sim_name in enumerate(self.sim.keys()):
@@ -304,18 +307,26 @@ class SimulationCollection:
                         )
         self._merged_snapshots_to_file(ray_df_sum, dir_out, integration_range)
 
-    def _get_box_and_ray_nrs(self, integration_range: dict) -> dict:
-        """ Get all box and ray-snapshot numbers for selected range """
+    def _get_box_and_ray_nrs(
+        self,
+        integration_range: dict,
+        rm_ray: Optional[dict] = None,
+    ) -> dict:
+        """
+        Get all box and ray-snapshot numbers for selected range.
+
+        Args:
+            integration_range:
+            rm_ray:
+        """
         if not integration_range["z"]:
             if integration_range["box"][0] == 0:
                 print("Integrate over whole light-cone")
-                self.complete_lc = True
             elif integration_range["ray"][0] == 0:
                 print("Integrate over box", integration_range["box"])
                 self.config = self.config[
                     self.config.index.get_level_values(0).isin(integration_range["box"])
                 ]
-                self.complete_lc = False
         else:
             print("Integrate over redshift-range", integration_range["z"])
             # if merging based on redshift
@@ -324,11 +335,15 @@ class SimulationCollection:
                 (z_range.min() < self.config["redshift"])
                 & (self.config["redshift"] < z_range.max())
             ]
-            self.complete_lc = False
 
         box_and_ray_nrs = {}
         for box_nr, ray_nr in self.config.index.values:
             box_and_ray_nrs.setdefault(box_nr, []).append(ray_nr)
+
+        if rm_ray:
+            for box_nr in rm_ray.keys():
+                for ray_nr in rm_ray[box_nr]:
+                    box_and_ray_nrs[box_nr].remove(ray_nr)
         return box_and_ray_nrs
 
     def _translate_redshift(
@@ -396,7 +411,7 @@ class SimulationCollection:
         """
         if not integration_range["z"]:
             if integration_range["box"][0] == 0:
-                fout = dir_out + "Ray_maps_lc.h5"
+                fout = dir_out + "Ray_maps_lc_new_new.h5"
             elif integration_range["ray"][0] == 0:
                 fout = dir_out + "Ray_maps_box%d.h5" % box_nr
         else:

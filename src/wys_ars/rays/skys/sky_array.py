@@ -1,4 +1,4 @@
-import os, sys, glob
+import os, sys, glob, copy
 import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage.filters import convolve
+from sklearn.feature_extraction.image import extract_patches_2d
+from sklearn.feature_extraction.image import reconstruct_from_patches_2d
 
 import astropy
 from astropy.io import fits
@@ -50,6 +52,9 @@ class SkyArray:
         create_cmb:
         create_mask:
         convolution:
+        zoom:
+        division:
+        merge:
     """
     def __init__(
         self,
@@ -57,7 +62,7 @@ class SkyArray:
         opening_angle: float,
         quantity: str,
         dirs: Dict[str, str],
-        map_file: str,
+        map_file: Optional[str] = None,
     ):
         self.data = {"orig": skymap}
         self.npix = skymap.shape[0]
@@ -75,7 +80,7 @@ class SkyArray:
         dir_in: str,
         npix: Optional[int] = None,
         convert_unit: bool = True,
-    ) -> "SkyMap":
+    ) -> "SkyArray":
         """
         Initialize class by reading the skymap data from pandas hdf5 file
         or numpy array.
@@ -115,7 +120,7 @@ class SkyArray:
         map_file: str,
         npix: Optional[int] = None,
         convert_unit: bool = True,
-    ) -> "SkyMap":
+    ) -> "SkyArray":
         """
         Initialize class by reading the skymap data from pandas DataFrame. 
 
@@ -140,8 +145,8 @@ class SkyArray:
         opening_angle: float,
         quantity: str,
         dir_in: str,
-        map_file: str,
-    ) -> "SkyMap":
+        map_file: Optional[str] = None,
+    ) -> "SkyArray":
         """
         Initialize class by reading the skymap data from np.ndarray.
 
@@ -193,30 +198,127 @@ class SkyArray:
         peak_counts_df = pd.DataFrame(data=peak_counts_dic)
         return peak_counts_df
 
+    def crop(
+        self,
+        xlimit: Union[tuple, list],
+        ylimit: Union[tuple, list],
+        of: Optional[str] = None,
+        img: Optional[np.ndarray] = None,
+        rtn: bool = False,
+    ) -> np.ndarray:
+        """
+        Zoom into sky_array map.
+
+        Args:
+            xlimit and ylimit:
+                Boundaries of zoom. If given in ints units are pixels,
+                if floats percentages are used.
+            of:
+                skymap image identifier.
+        """
+        if of:
+            img = copy.deepcopy(self.data[of])
+        npix = img.shape[0]
+        xlimit = np.asarray(xlimit)
+        ylimit = np.asarray(ylimit)
+        if isinstance(xlimit[0], float):
+            xlimit = (npix * xlimit/100).astype(int)
+            ylimit = (npix * ylimit/100).astype(int)
+        zoom = img[int(xlimit[0]):int(xlimit[1]), int(ylimit[0]):int(ylimit[1])]
+        if rtn:
+            return zoom
+        else:
+            print(f"Image crop to x={xlimit} and y={ylimit}.")
+            self.data[of] = zoom
+            self.opening_angle = np.int(
+                self.opening_angle * abs(np.diff(xlimit)) / self.npix
+            )
+            self.npix = zoom.shape[0]
+
+    def division(
+        self,
+        ntiles: int,
+        of: Optional[str] = None,
+        img: Optional[np.ndarray] = None,
+        rtn: bool = False,
+    ) -> Union[List[np.ndarray], None]:
+        """
+        Divide image into tiles.
+        Should use sklearn.feature_extraction.image.extract_patches_2d
+
+        Args:
+            ntiles:
+                Nr. of tiles per edge (as to be in 2^n).
+        """
+        if of:
+            img = copy.deepcopy(self.data[of])
+        npix = img.shape[0]
+        edges = list(np.arange(0, npix, npix/ntiles)) + [npix]
+        edges = np.array(
+            [edges[idx:idx+2] for idx in range(len(edges)-1)]
+        ).astype(int)
+        tiles = []
+        for xlim in edges:
+            for ylim in edges:
+                tiles.append(self.crop(xlim, ylim, img=img, rtn=True))
+        print(f"The image is divided into {len(tiles)} tiles.")
+        tiles = np.asarray(tiles)
+        if rtn:
+            return tiles
+        else:
+            self.tiles = tiles
+
+    def merge(
+        self,
+        tiles: np.ndarray,
+        rtn: bool = False,
+    ) -> Union[np.ndarray, None]:
+        """
+        Merge tiles created with self.division.
+        Should use sklearn.feature_extraction.image.reconstruct_from_patches_2d
+
+        Args:
+            tiles:
+                3D
+        """
+        ntiles = len(tiles)
+        nrows = int(np.sqrt(ntiles))
+        _parts = np.arange(0, ntiles+nrows, nrows)
+        row_tile_idx = [(_parts[ii], _parts[ii+1]) for ii in range(nrows)]
+        row_tiles = []
+        for idx in range(nrows):
+            start = row_tile_idx[idx][0]
+            end = row_tile_idx[idx][1]
+            row_tiles.append(np.hstack((tiles[start:end])))
+        row_tiles = np.asarray(row_tiles)
+        img = np.vstack((row_tiles))
+        if rtn:
+            return img
+
     def convolution(
         self,
         filter_dsc: dict,
         on: Optional[str] = None,
         sky_array: Optional[np.ndarray] = None,
         rtn: bool = False,
-    ) -> None:
+    ) -> Union[np.ndarray, None]:
         """
         Convolve kernel (filter_dsc) over skymap image (on)
         Args:
             filter_dsc:
-                Kernel description
+                Kernel description.
             on:
-                skymap image identifier
+                skymap image identifier.
         """
         assert self.quantity in ["kappa_2", "isw_rs"], "Not yet implemented"
         # load rays/utils/filters.py package for dynamic function call
         module = import_module("wys_ars.rays.utils")
         if on == "orig_gsn":
-            _map = self.add_galaxy_shape_noise()
+            _map = copy.deepcopy(self.add_galaxy_shape_noise())
         elif sky_array is None:
-            _map = self.data[on]
+            _map = copy.deepcopy(self.data[on])
         else:
-            _map = sky_array
+            _map = copy.deepcopy(sky_array)
 
         map_name = [on]
         for filter_name, args in filter_dsc.items():
@@ -280,15 +382,14 @@ class SkyArray:
             self.data["orig_gsn"] = self.data["orig"] + self.data["gsn"]
             return self.data["orig_gsn"]
         else:
-            raise SkyMapWarning(f"GSN should not be added to {self.quantity}")
+            raise SkyArrayWarning(f"GSN should not be added to {self.quantity}")
 
     def create_cmb(
         self,
         filepath_cl: str,
-        theta: float = 20.,
-        npix: int = 128,
         lmax: int = 3e3,
         rnd_seed: Optional[int] = None,
+        rtn: bool = False,
     ) -> np.ndarray:
         """
         Cosmig Microwave Background (CMB) on partial-sky map,
@@ -307,18 +408,48 @@ class SkyArray:
         Returns:
             cmb_map:
         """
-        Nx = Ny = npix
-        Lx = Ly = theta * np.pi / 180.
+        if rnd_seed:
+            np.random.seed(rnd_seed)
+        Nx = Ny = self.npix
+        Lx = Ly = self.opening_angle * np.pi / 180.
 
-        cl_cmb = np.load(filepath_cl)
-        np.random.seed(rnd_seed)
-        self.cmb = nmt.synfast_flat(
+        cl_tt_cmb = np.load(filepath_cl)[1]
+        cmb = nmt.synfast_flat(
             Nx, Ny, Lx, Ly,
-            cls=np.array([cl_cmb]),
+            cls=np.array([cl_tt_cmb]),
             spin_arr=np.array([0])
-        )
-        return cmb
+        )[0]
+        if rtn:
+            return cmb
+        else:
+            self.data["cmb"] = cmb
 
+    def add_cmb(
+        self,
+        filepath_cl: str,
+        on: str = "orig",
+        lmax: Optional[float] = None,
+        rnd_seed: Optional[int] = None,
+        rtn: bool = False,
+        overwrite: bool = True,
+    ) -> np.ndarray:
+        """
+        Args:
+        """
+        if self.quantity == "isw_rs":
+            if "cmb" not in self.data.keys():
+                self.create_cmb(filepath_cl, lmax, rnd_seed)
+            _map = self.data[on] + self.data["cmb"]
+            if rtn:
+                return _map
+            else:
+                if overwrite:
+                    self.data[on] = _map
+                else:
+                    self.data[f"{on}_cmb"] = _map
+        else:
+            raise SkyArrayWarning(f"CMB should not be added to {self.quantity}")
+    
     def _array_to_fits(self, map_out: np.ndarray) -> astropy.io.fits:
         """ Convert maps that in .npy format into .fits format """
         # Convert .npy to .fits

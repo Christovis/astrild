@@ -33,8 +33,7 @@ class SkyIO:
         series: pd.Series
     ) -> np.ndarray:
         """
-        Used for wys_ars.rays.SkyMap
-        Used for all operations regarding convergence peaks and voids
+        Used for any analysis of skymap features.
         """
         _zip_array = sorted(zip(series.index.values, series.values,))
         _values = np.array([j for (i, j) in _zip_array])
@@ -46,6 +45,14 @@ class SkyIO:
                 array[j, i] = _values[k]
                 k += 1
         return array
+    
+    def transform_NumpyNdarray_to_PandasSeries(
+        array: np.ndarray
+    ) -> pd.DataFrame:
+        """
+        Used for any analysis of skymap features.
+        """
+        #TODO
 
     def to_file(
         dir_out: str,

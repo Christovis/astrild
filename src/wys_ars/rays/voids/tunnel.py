@@ -102,11 +102,12 @@ class TunnelsFinder:
         Args:
         """
         if sigma is None:
-            _kappa_mean = np.mean(map_values)
+            #_kappa_mean = np.mean(map_values)
+            #snr = (peak_values - _kappa_mean) / _kappa_std
             _kappa_std = np.std(map_values)
-            snr = (peak_values - _kappa_mean) / _kappa_std
+            snr = peak_values / _kappa_std
         else:
-            snr = (peak_values) / sigma
+            snr = peak_values / sigma
         return snr
 
     def _remove_peaks_crossing_edge(
