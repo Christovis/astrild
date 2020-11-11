@@ -30,7 +30,9 @@ class SimulationCollection:
         config_file_df:
 
     Methods:
+        from_file:
         compress_stats:
+        compress_histograms:
         sum_raytracing_snapshots:
     """
 
@@ -67,24 +69,27 @@ class SimulationCollection:
         """
         with open(config_file) as f:
             sims_args = yaml.load(f, Loader=yaml.FullLoader)
-        sims = {}
-        for sim_name, sim_args in sims_args.items():
-            if sim_args["type"] == "particles":
-                sims[sim_name] = Ecosmog(**sim_args["init"])
-            elif sim_args["type"] == "rays":
-                sims[sim_name] = RayRamses(**sim_args["init"])
-            else:
-                raise SimulationCollectionWarning(
-                    f"{sim_args['type']} have not been simulated :-("
-                )
+            sim_type = sims_args[list(sims_args.keys())[0]]["type"]
+        
         if not os.path.isfile(config_file_df):
             raise SimulationCollectionWarning(
                 "The file 'ray_snapshot_info.h5' does note exist"
             )
-        if sim_args["type"] == "particles":
-            config = pd.read_hdf(config_file_df)#, key="df")
-        elif sim_args["type"] == "rays":
-            config = pd.read_hdf(config_file_df)#, key="df")
+        elif sim_type == "particles":
+            config = pd.read_hdf(config_file_df, key="df")
+        elif sim_type == "rays":
+            config = pd.read_hdf(config_file_df, key="df")
+        
+        sims = {}
+        for idx, (sim_name, sim_args) in enumerate(sims_args.items()):
+            if sim_args["type"] == "particles":
+                sims[sim_name] = Ecosmog(config.loc[(idx+1,)], **sim_args["init"])
+            elif sim_args["type"] == "rays":
+                sims[sim_name] = RayRamses(config.loc[(idx+1,)], **sim_args["init"])
+            else:
+                raise SimulationCollectionWarning(
+                    f"{sim_args['type']} have not been simulated :-("
+                )
         
         return SimulationCollection(config, sims)
 

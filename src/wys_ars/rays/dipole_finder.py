@@ -183,6 +183,7 @@ class Dipoles:
         snr = peak_values / _kappa_std
         return snr
 
+
     @classmethod
     def _remove_peaks_crossing_edge(
         cls,
@@ -220,19 +221,109 @@ class Dipoles:
         )
         return sigma, pos
 
-    def find_nearest(self, df2: pd.DataFrame) -> pd.DataFrame:
+
+    def find_nearest(
+        self, df2: pd.DataFrame, columns: dict,
+    ) -> None:
         """
         Method used to e.g. find haloes which cause a dipole.
 
         Args:
             df2:
         """
-        # find corresponding group-halo to dipole signal
-        nbrs = NearestNeighbors(
-            n_neighbors=1,
-            algorithm='ball_tree'
-        ).fit(self.data[["x_deg", "y_deg"]].values)
-        distances, indices = nbrs.kneighbors(df2[["x_deg", "y_deg"]].values)
-        distances=distances.T[0]; indices=indices.T[0]
-        self.data["index_dipole"] = indices
-        self.data["distances"] = distances
+        if "box_nr" in self.data.columns.values:
+            distances, ids = self.find_nearest_in_box(self.data, df2)
+        elif "snap_nr" in self.data.columns.values:
+            distances, ids = self.find_nearest_in_snap(self.data, df2)
+        else:
+            # find corresponding group-halo to dipole signal
+            distances, ids = self._get_index_and_distance(self.data, df2)
+        self.data[columns["id"]] = ids
+        self.data[columns["dist"]] = distances
+
+
+    def find_nearest_in_box(
+        self, df1: pd.DataFrame, df2: pd.DataFrame,
+    ) -> tuple:
+        distances = []
+        ids = []
+        for box_nr in np.unique(df1["box_nr"].values):
+            df1_in_box = df1[df1["box_nr"] == box_nr]
+            df2_in_box = df2[df2["box_nr"] == box_nr]
+            if "ray_nr" in df1_in_box.columns.values:
+                _distances, _indices = self.find_nearest_in_snap(
+                    df1_in_box, df2_in_box,
+                )
+            else:
+                _distances, _indices = self._get_index_and_distance(
+                    df1_in_box, df2_in_box,
+                )
+            distances += _distances
+            ids += _indices
+        return distances, ids
+
+
+    def find_nearest_in_snap(
+        self, df1: pd.DataFrame, df2: pd.DataFrame,
+    ) -> tuple:
+        distances = []
+        ids = []
+        for ray_nr in np.unique(df1["ray_nr"].values):
+            df1_in_snap = df1[df1["ray_nr"] == ray_nr]
+            df2_in_snap = df2[df2["ray_nr"] == ray_nr]
+            _distances, _indices = self._get_index_and_distance(
+                df1_in_snap, df2_in_snap,
+            )
+            distances += _distances
+            ids += _indices
+        return distances, ids
+
+    def _get_index_and_distance(
+        self, df1: pd.DataFrame, df2: pd.DataFrame,
+    ) -> tuple:
+        if len(df2.index.values) == 0:
+            print("There are no Halos in this distance")
+            distances = np.ones(len(df1.index.values)) * -99999
+            ids = np.ones(len(df1.index.values)) * -99999
+        else:
+            nbrs = NearestNeighbors(
+                n_neighbors=1,
+                algorithm='ball_tree'
+            ).fit(df2[["x_deg", "y_deg"]].values)
+            distances, indices = nbrs.kneighbors(df1[["x_deg", "y_deg"]].values)
+            distances = distances.T[0]
+            ids = df2["id"].values[indices.T[0]].astype(int)
+            if len(ids) > len(np.unique(ids)):
+                nan_idx = []
+                for u_id in np.unique(ids):
+                    _idx = np.where(ids == u_id)[0]
+                    min_idx = np.argmin(distances[_idx])
+                    nan_idx += list(np.delete(_idx, min_idx))
+                ids[nan_idx] = -99999
+                distances[nan_idx] = -99999
+        return list(distances), list(ids)
+
+    def _get_transverse_velocity(
+        self, iswrssky: Type[SkyMap], defltxsky: Type[SkyMap], defltysky: Type[SkyMap],
+    ) -> tuple:
+        """
+        Velocity vector component from ISWRS and deflection angle map.
+        Eq. 9 in arxiv:1812.04241
+        """
+        x_vel = self._get_transverse_velocity_component(
+            iswrssky.data["orig_hpf_x3df_apo"], defltxsky.data["orig_x3df_apo"]
+        )
+        y_vel = self._get_transverse_velocity_component(
+            iswrssky.data["orig_hpf_y3df_apo"], defltysky.data["orig_y3df_apo"]
+        )
+        return x_vel, y_vel
+
+    def _get_transverse_velocity_component(
+        self, iswrs: np.ndarray, kappa: np.ndarray,
+    ) -> float:
+        """
+        Velocity vector component from ISWRS and deflection angle map.
+        Eq. 9 in arxiv:1812.04241
+        """
+        c_light = 299792.458  #[km/s]
+        return -c_light * np.sum(iswrs) / np.sum(kappa)

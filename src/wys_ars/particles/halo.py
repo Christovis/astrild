@@ -126,6 +126,7 @@ class Halos:
                 "SubhaloPos",
                 "SubhaloVel",
                 "SubhaloMass",
+                "SubhaloHalfmassRad",
             ]
         )
         if snapshot.cat["n_groups"] == 0:
@@ -145,23 +146,52 @@ class Halos:
     ) -> read_hdf5.snapshot:
         """
         Filter halos with '> nr_particles' particles
+        
+        Args:
+
+        Return:
         """
         min_mass = dm_particle_mass * nr_particles
-        
         mass = snapshot.cat["Group_M_Crit200"][:] * snapshot.header.hubble  # [Msun/h]
         idx_groups = mass > min_mass
-        
         mass = snapshot.cat["SubhaloMass"][:] * snapshot.header.hubble  # [Msun/h]
         idx_subhalos = mass > min_mass
-
         # idx = snapshot.cat["GroupLenType"][:, 1] > nr_particles
         # idx = snapshot.cat["Group_M_Crit200"][:] > \
         #    100*(snapshot.header.massarr[1] * 1e10 / snapshot.header.hubble)
+        return self.filter_subfind_and_fof_halos(snapshot, idx_groups, idx_subhalos)
+    
+    def filter_nonzero_subfind_halos_size(
+        self, snapshot: read_hdf5.snapshot,
+    ) -> read_hdf5.snapshot:
+        """
+        Filter halos with non-zero size
+
+        Args:
+
+        Return:
+        """
+        rad = snapshot.cat["Group_R_Crit200"][:]  # [ckpc/h]
+        idx_groups = rad > 0
+        rad = snapshot.cat["SubhaloHalfmassRad"][:]  # [ckpc/h]
+        idx_subhalos = rad > 0
+        return self.filter_subfind_and_fof_halos(snapshot, idx_groups, idx_subhalos)
+    
+    def filter_subfind_and_fof_halos(
+        self,
+        snapshot: read_hdf5.snapshot,
+        idx_groups: np.ndarray,
+        idx_subhalos: np.ndarray,
+    ) -> read_hdf5.snapshot:
+        """ Filter sub- and fof-halos by indices """
         for key, value in snapshot.cat.items():
             if "Group" in key:
                 idx = idx_groups
             elif ("Subhalo" in key) and (len(snapshot.cat[key]) > len(idx_groups)):
                 idx = idx_subhalos
+            else:
+                HalosWarning(f"The key is {key} is a problem")
+                continue
 
             if len(value.shape) == 0:
                 continue

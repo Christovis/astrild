@@ -1,0 +1,3 @@
+gcc -g -Wall -O2 -fopenmp -c -fPIC ./fft_convolve.c ./lensing_funcs.c -lfftw3 -lm 
+gcc -shared -fopenmp ./fft_convolve.o ./lensing_funcs.o -lfftw3 -lm -o libglsg.so 
+rm ./*.o

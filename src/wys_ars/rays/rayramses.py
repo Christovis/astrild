@@ -2,7 +2,7 @@ import os, sys, glob
 import argparse
 from struct import *
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,8 @@ from astropy import constants as const
 from astropy.cosmology import LambdaCDM, cvG
 
 from wys_ars.simulation import Simulation
+from wys_ars.particles.halo import Halos
+from wys_ars.io import IO
 
 dir_src = Path(__file__).parent.absolute()
 default_config_file_df = dir_src / "configs/ray_snapshot_info.h5"
@@ -31,24 +33,30 @@ class RayRamses(Simulation):
         dir_root:
         opening_angle: light-cone opening angle; [deg^2]
         npix: nr. of cells along the four light-cone edges
+        config: contains snapshot infos (e.g. redshifts, comov. dist, ...)
 
     Methods:
-        compress_snapshot
-        merge_snapshots
+        compress_snapshot:
+        sum_snapshots:
+        find_halos_in_raytracing_box:
+        find_halos_in_raytracing_snapshot:
     """
 
     def __init__(
         self,
+        config: Union[None, pd.DataFrame],
         dir_sim: str,
         dir_out: str,
         file_dsc: dict = {"root": "Ray_maps", "extension": "dat"},
         dir_root: str = None,
-        opening_angle: float = 10.0,
-        npix: int = 2048,
+        opening_angle: float = 20.0,
+        npix: int = 8192,
     ):
         super().__init__(dir_sim, dir_out, file_dsc, dir_root)
         self.opening_angle = opening_angle
         self.npix = npix
+        self.config = config
+
 
     def compress_snapshot(
         self,
@@ -129,7 +137,8 @@ class RayRamses(Simulation):
             )
             ray_collect_df.to_hdf(file_out, key="df", mode="w")
 
-    def merge_snapshots(
+
+    def sum_snapshots(
         self,
         dir_out: str,
         columns: list,
@@ -198,6 +207,7 @@ class RayRamses(Simulation):
 
         self._merged_snapshots_to_file(ray_df_sum, dir_out, integration_range)
 
+
     def _get_box_and_ray_nrs(self, integration_range: dict) -> np.ndarray:
         """
         Get all box and ray-snapshot numbers for selected range.
@@ -226,6 +236,7 @@ class RayRamses(Simulation):
             self.complete_lc = False
 
         return self.ray_info_df.index.values
+
 
     def _translate_redshift(
         self,
@@ -268,6 +279,7 @@ class RayRamses(Simulation):
         )
         return quantity_shift
 
+
     def _kernel_function(self, x: float, x_s: float) -> float:
         """
         Args:
@@ -280,6 +292,7 @@ class RayRamses(Simulation):
         """
         g = (x_s - x) * x / x_s
         return g
+
 
     def _merged_snapshots_to_file(
         self, ray_df_sum: pd.DataFrame, dir_out: str, integration_range: dict
@@ -305,3 +318,117 @@ class RayRamses(Simulation):
             )
             print("Save in %s" % fout)
             ray_df_sum.to_hdf(fout, key="df", mode="w")
+
+
+    def find_halos_in_raytracing_snapshot(
+        self, halos, box_nr, snap_nr, ray_nr, boxdist, boxsize, snaplimit, hubble,
+    ) -> Union[None, pd.DataFrame]:
+        coeff = hubble/1e3
+        halocat = halos.get_subfind_halo_data(snap_nr=snap_nr)
+        if halocat is None:
+            return None
+        else:
+            halocat = halos.get_subfind_halo_data(snap_nr=snap_nr)
+            halocat = halos.filter_nonzero_subfind_halos_size(halocat).cat
+        halocatindex = np.arange(len(halocat["Group_M_Crit200"][:]))
+        # radial distance from observer [Mpc/h]
+        dist = np.sqrt(
+            (halocat["GroupPos"][:, 0]*coeff - boxsize/2)**2 + \
+            (halocat["GroupPos"][:, 1]*coeff - boxsize/2)**2 + \
+            (halocat["GroupPos"][:, 2]*coeff + boxdist)**2
+        )
+        # angular
+        x_theta = np.arctan(
+            (halocat["GroupPos"][:, 0]*coeff - boxsize/2)/ \
+            (halocat["GroupPos"][:, 2]*coeff + boxdist)
+        ) * 180/np.pi
+        y_theta = np.arctan(
+            (halocat["GroupPos"][:, 1]*coeff - boxsize/2)/ \
+            (halocat["GroupPos"][:, 2]*coeff + boxdist)
+        ) * 180/np.pi
+
+
+        # index of halos in light-cone
+        indx = np.where(
+            (dist >= np.min(snaplimit)) &
+            (dist <= np.max(snaplimit)) &
+            (np.abs(x_theta) <= self.opening_angle/2) &
+            (np.abs(y_theta) <= self.opening_angle/2)
+        )[0]
+        print(f"There are {len(indx)} halos in here")
+
+        # velocity projection
+        pos_norm = np.linalg.norm(halocat["GroupPos"][indx,:], axis=1)
+        vr = np.abs(
+            (halocat["GroupVel"][indx,:]*halocat["GroupPos"][indx,:]).sum(axis=1)/\
+            pos_norm)[:, np.newaxis] * \
+            halocat["GroupPos"][indx,:]/pos_norm[:, np.newaxis]
+        vt = halocat["GroupVel"][indx,:] - vr
+        vel_x = vt[:, 0]
+        vel_y = vt[:, 1]
+
+        r200_deg = np.arctan(
+            halocat["Group_R_Crit200"][indx] * coeff / dist[indx]
+        ) * 180/np.pi
+
+        halo_id = [
+            int(f"{box_nr}{snap_nr}{ii}")
+            for ii in halocatindex[indx].astype(int)
+        ]
+        halos_dict = {
+            "id": halo_id,
+            "dist": dist[indx],
+            "x_deg": x_theta[indx] + self.opening_angle/2,
+            "x_pix": self._degree_to_pixel(x_theta[indx] + self.opening_angle/2),
+            "y_deg": y_theta[indx] + self.opening_angle/2,
+            "y_pix": self._degree_to_pixel(y_theta[indx] + self.opening_angle/2),
+            "x_vel": vel_x,
+            "y_vel": vel_y,
+            "m200": halocat["Group_M_Crit200"][indx],
+            "r200_deg": r200_deg,
+            "r200_pix": self._degree_to_pixel(r200_deg),
+            "ray_nr": [ray_nr+1] * len(indx),
+            "snap_nr": [snap_nr] * len(indx),
+        }
+        halos_df = pd.DataFrame(data=halos_dict)
+        return halos_df
+
+
+    def _degree_to_pixel(self, deg: np.ndarray) -> np.ndarray:
+        """ Convert degree to pixel position """
+        pix = np.ceil(deg * self.npix/self.opening_angle).astype(int)
+        return pix
+
+
+    def find_halos_in_raytracing_box(
+        self,
+        halos: Halos,
+        snapdist: None,
+        box_nr: None,
+        boxsize: None,
+        hubble: None,
+    ) -> Union[None, pd.DataFrame]:
+        """
+        Args:
+
+        Returns:
+        """
+        boxdist = snapdist[-1]
+        first = True
+        # run through ray-ramses snapshots
+        for ray_nr in np.unique(self.file_nrs)[:-1]:
+            snap_nr = ray_nr + len(halos.sim.config.index) - len(self.config.index)
+            snaplimit = (snapdist[ray_nr-1], snapdist[ray_nr])
+            
+            halos_df = self.find_halos_in_raytracing_snapshot(
+                halos, box_nr, snap_nr, ray_nr, boxdist, boxsize, snaplimit, hubble,
+            )
+
+            if (first is True) and (halos_df is not None):
+                halos_df_sum = halos_df
+                first = False
+            elif first is False:
+                halos_df_sum = halos_df_sum.append(
+                    halos_df, ignore_index=True,
+                )
+        return halos_df_sum

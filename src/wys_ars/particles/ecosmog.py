@@ -55,6 +55,7 @@ class Ecosmog(Simulation):
 
     def __init__(
         self,
+        config: Union[None, pd.DataFrame],
         dir_sim: str,
         dir_out: str = None,
         file_dsc: dict = {"root": "snap_010", "extension": None},
@@ -66,6 +67,7 @@ class Ecosmog(Simulation):
         self.boxsize = boxsize
         self.domain_level = domain_level
         self.npar = domain_level
+        self.config = config
 
 
     def to_gadget(self) -> None:

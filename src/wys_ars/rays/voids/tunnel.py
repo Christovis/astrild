@@ -175,7 +175,7 @@ class TunnelsFinder:
             _peaks2txt(nu_tmp, pos_tmp, file_peaks_txt)
 
             # store peaks in pd.DataFrame
-            peak_dir = {
+            peak_dict = {
                 "x_deg": pos_tmp[:, 0],
                 "x_pix": np.rint(
                     pos_tmp[:, 0] * self.skymap.npix / self.skymap.opening_angle
@@ -207,7 +207,7 @@ class TunnelsFinder:
             os.remove(file_peaks_txt)
 
             # adding radii to peaks
-            peaks_df = pd.DataFrame(data=peak_dir)
+            peaks_df = pd.DataFrame(data=peak_dict)
             self.filtered_peaks = self.set_peak_radii(
                 peaks_df, self.voids, self.skymap.npix, self.skymap.opening_angle
             )

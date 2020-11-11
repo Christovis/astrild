@@ -1,7 +1,7 @@
 import os, sys, glob, copy
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 from importlib import import_module
 
 import pandas as pd
@@ -310,7 +310,6 @@ class SkyArray:
             on:
                 skymap image identifier.
         """
-        assert self.quantity in ["kappa_2", "isw_rs"], "Not yet implemented"
         # load rays/utils/filters.py package for dynamic function call
         module = import_module("wys_ars.rays.utils")
         if on == "orig_gsn":
@@ -450,11 +449,24 @@ class SkyArray:
         else:
             raise SkyArrayWarning(f"CMB should not be added to {self.quantity}")
     
-    def _array_to_fits(self, map_out: np.ndarray) -> astropy.io.fits:
-        """ Convert maps that in .npy format into .fits format """
-        # Convert .npy to .fits
-        data = fits.PrimaryHDU()
-        data.header["ANGLE"] = self.opening_angle # [deg]
-        data.data = map_out
-        return data
-   
+    def convert_convergence_to_deflection(
+        self,
+        on: Optional[str] = None,
+        sky_array: Optional[np.ndarray] = None,
+        rtn: bool = False,
+) -> Tuple[np.ndarray, np.ndarray]:
+        assert self.quantity in ["kappa_1", "kappa_2"], (
+            "Deflection angle can only be calculated from the kappa map"
+        )
+        if sky_array is None:
+            _map = copy.deepcopy(self.data[on])
+        else:
+            _map = copy.deepcopy(sky_array)
+        alpha_1, alpha_2 = SkyUtils.convert_convergence_to_deflection(
+            _map, self.npix, self.opening_angle
+        )
+        if rtn:
+            return alpha_1, alpha_2
+        else:
+            self.data["defltx"] = alpha_2
+            self.data["deflty"] = alpha_1

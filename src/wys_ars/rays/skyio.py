@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 import healpy as hp
+import astropy
 
 from wys_ars.io import IO
 
@@ -94,3 +95,12 @@ class SkyIO:
         _file = _file + [extension]
         file_out = ".".join(_file) 
         return file_out
+
+
+    def _array_to_fits(self, map_out: np.ndarray) -> astropy.io.fits:
+        """ Convert maps that in .npy format into .fits format """
+        # Convert .npy to .fits                  
+        data = fits.PrimaryHDU()                 
+        data.header["ANGLE"] = self.opening_angle # [deg]
+        data.data = map_out                      
+        return data
