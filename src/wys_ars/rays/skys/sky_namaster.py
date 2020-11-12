@@ -54,7 +54,6 @@ class SkyNamaster:
     def __init__(
         self,
         skymap: np.ndarray,
-        npix: int,
         opening_angle: float,
         quantity: str,
         dirs: Dict[str, str],
@@ -72,7 +71,6 @@ class SkyNamaster:
     def from_file(
         cls,
         map_file: str,
-        npix: int,
         opening_angle: float,
         quantity: str,
         dir_in: str,
@@ -96,19 +94,18 @@ class SkyNamaster:
         if file_extension == "h5":
             map_df = pd.read_hdf(map_file, key="df")
             return cls.from_dataframe(
-                map_df, npix, opening_angle, quantity, dir_in, map_file, convert_unit,
+                map_df, opening_angle, quantity, dir_in, map_file, convert_unit,
             )
         elif file_extension == "fits":
             map_array = hp.read_map(map_file)
             return cls.from_array(
-                map_array, npix, opening_angle, quantity, dir_in, map_file
+                map_array, opening_angle, quantity, dir_in, map_file
             )
     
     @classmethod
     def from_dataframe(
         cls,
         map_df: pd.DataFrame,
-        npix: int,
         opening_angle: float,
         quantity: str,
         dir_in: str,
@@ -129,14 +126,13 @@ class SkyNamaster:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
         map_array = SkyIO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
         return cls.from_array(
-            map_array, npix, opening_angle, quantity, dir_in, map_file,
+            map_array, opening_angle, quantity, dir_in, map_file,
         )
     
     @classmethod
     def from_array(
         cls,
         map_array: np.array,
-        npix: int,
         opening_angle: float,
         quantity: str,
         dir_in: str,
@@ -154,7 +150,7 @@ class SkyNamaster:
         """
         dirs = {"sim": dir_in}
         map_array = hp.ma(map_array)  # mask out bad values (e.g Nan)
-        return cls(map_array, npix, opening_angle, quantity, dirs, map_file)
+        return cls(map_array, opening_angle, quantity, dirs, map_file)
 
     def to_namaster(self):
         """

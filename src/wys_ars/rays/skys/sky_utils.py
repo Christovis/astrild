@@ -5,12 +5,14 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+import numba as nb
 
 c_light = 299792.458  # [km/s]
 c_lib_path = Path(__file__).parent.absolute()
 
 
 class SkyUtils:
+    @nb.jit(nopython=True)
     def convert_code_to_phy_units(
         quantity: str, map_df: pd.DataFrame,
     ) -> pd.DataFrame:

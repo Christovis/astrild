@@ -1,4 +1,4 @@
-import os, sys, glob
+import os, sys, glob, copy
 import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -77,7 +77,7 @@ class SkyHealpix:
         dir_in: str,
         nside: Optional[int] = None,
         convert_unit: bool = True,
-    ) -> "SkyMap":
+    ) -> "SkyHealpix":
         """
         Initialize class by reading the skymap data from pandas hdf5 file
         or numpy array.
@@ -96,12 +96,12 @@ class SkyHealpix:
         if file_extension == "h5":
             map_df = pd.read_hdf(map_file, key="df")
             return cls.from_dataframe(
-                map_df, opening_angle, quantity, dir_in, map_file, nside, convert_unit,
+                map_df, opening_angle, nside, quantity, dir_in, map_file, convert_unit,
             )
         elif file_extension == "fits":
             map_array = hp.read_map(map_file)
             return cls.from_array(
-                map_array, opening_angle, quantity, dir_in, map_file, nside
+                map_array, opening_angle, quantity, dir_in, map_file,
             )
     
     @classmethod
@@ -109,12 +109,12 @@ class SkyHealpix:
         cls,
         map_df: pd.DataFrame,
         opening_angle: float,
+        nside: int,
         quantity: str,
         dir_in: str,
         map_file: str,
-        nside: Optional[int] = None,
         convert_unit: bool = True,
-    ) -> "SkyMap":
+    ) -> "SkyHealpix":
         """
         Initialize class by reading the skymap data from pandas DataFrame. 
 
@@ -127,7 +127,7 @@ class SkyHealpix:
         """
         if convert_unit:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
-        map_array = SkyIO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
+        map_array = SkyIO.transform_PandasDataFrame_to_Healpix(map_df, quantity, nside)
         return cls.from_array(
             map_array, opening_angle, quantity, dir_in, map_file,
         )
@@ -140,7 +140,7 @@ class SkyHealpix:
         quantity: str,
         dir_in: str,
         map_file: Optional[str] = None,
-    ) -> "SkyMap":
+    ) -> "SkyHealpix":
         """
         Initialize class by reading the skymap data from np.ndarray.
 
@@ -204,14 +204,15 @@ class SkyHealpix:
         self,
         on: str,
         theta: Optional[float] = None,
-        nside: Optional[int] = None,
     ) -> None:
-        if "mask" not in self.data.keys():
-            self.create_mask(theta, nside)
-        self.data[on] = hp.ma(self.data[on])
-        self.data[on].mask = self.data["mask"]
+        """
+        """
+        if ("mask" not in self.data.keys()) or (theta != self.mask_theta):
+            self.create_mask(theta)
+        self.data[on+"_mask"] = hp.ma(copy.deepcopy(self.data[on]))
+        self.data[on+"_mask"].mask = self.data["mask"]
 
-    def create_mask(self, theta: float, nside: int) -> None:
+    def create_mask(self, theta: float,) -> None:
         """
         Mask out unobserved patches of the full-sky.
 
@@ -221,27 +222,27 @@ class SkyHealpix:
             nside:
                 Nr. of pixels per edge of the output full-sky map
         """
-        if nside is None:
-            nside = self.nside
-        npix = hp.nside2npix(nside)
+        print("create_mask", theta)
         # angular positions of all healpix pixels
-        pixel_theta, pixel_phi = hp.pix2ang(nside, np.arange(npix))
+        pixel_theta, pixel_phi = hp.pix2ang(self.nside, np.arange(self.npix))
         # range of ra and dec of the field-of-view
         ras = np.array([90-theta/2, 90+theta/2]) * np.pi/180  #[rad]
         decs = np.array([theta/2, 360-theta/2]) * np.pi/180   #[rad]
         # create mask
-        mask = np.ones(npix, dtype=np.bool)
-        mask[pixel_theta < ras[0]] = 0
-        mask[pixel_theta > ras[1]] = 0
-        mask[(decs[0] < pixel_phi) & (pixel_phi < decs[1])] = 0
+        mask = np.zeros(self.npix, dtype=np.bool)
+        mask[pixel_theta < ras[0]] = 1
+        mask[pixel_theta > ras[1]] = 1
+        mask[(decs[0] < pixel_phi) & (pixel_phi < decs[1])] = 1
         # smooth transition between fov and mask (not available in healpy)
         self.data["mask"] = nmt.mask_apodization(mask, 2.5, apotype="C2")
+        self.mask_theta = theta
 
     def rotate(
         self,
         theta: float,
         phi: float,
         which: str,
+        rtn: bool = False,
     ) -> np.ndarray:
         """
         Rotate the full-sky.
@@ -256,13 +257,16 @@ class SkyHealpix:
             theta = np.random.random()*180
             phi = np.random.random()*180
         
-        nside = hp.npix2nside(len(skymap))
         # Get theta, phi for non-rotated map
-        t, p = hp.pix2ang(nside, np.arange(hp.nside2npix(nside))) #theta, phi
+        t, p = hp.pix2ang(self.nside, np.arange(self.npix))
         # Define a rotator
         r = hp.Rotator(deg=True, rot=[theta,phi])
         # Get theta, phi under rotated co-ordinates
         trot, prot = r(t,p)
         # Interpolate map onto these co-ordinates
-        _skymap = hp.get_interp_val(skymap, trot, prot)
-        return _skymap
+        _skymap = copy.deepcopy(self.data[which])
+        _skymap = hp.get_interp_val(_skymap, trot, prot)
+        if rtn is True:
+            return _skymap
+        else:
+            self.data[which] = _skymap

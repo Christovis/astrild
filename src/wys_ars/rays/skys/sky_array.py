@@ -7,7 +7,6 @@ from importlib import import_module
 import pandas as pd
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
-from scipy.ndimage.filters import convolve
 from sklearn.feature_extraction.image import extract_patches_2d
 from sklearn.feature_extraction.image import reconstruct_from_patches_2d
 
@@ -64,9 +63,10 @@ class SkyArray:
         dirs: Dict[str, str],
         map_file: Optional[str] = None,
     ):
+        print("------------------", skymap.shape)
         self.data = {"orig": skymap}
-        self.npix = skymap.shape[0]
-        self.opening_angle = opening_angle
+        self._npix = skymap.shape[0]
+        self._opening_angle = opening_angle
         self.quantity = quantity
         self.dirs = dirs
         self.map_file = map_file
@@ -159,6 +159,14 @@ class SkyArray:
         """
         dirs = {"sim": dir_in}
         return cls(map_array, opening_angle, quantity, dirs, map_file)
+   
+    @property
+    def npix(self) -> int:
+        return self._npix
+    
+    @property
+    def opening_angle(self) -> float:
+        return self.opening_angle
     
     def pdf(self, nbins: int, of: str="orig") -> dict:
         _pdf = {}
@@ -189,7 +197,7 @@ class SkyArray:
         map_bins = np.arange(
             lower_bound, upper_bound, (upper_bound - lower_bound) / nbins,
         )
-        _map = ConvergenceMap(data=_map, angle=self.opening_angle*un.deg)
+        _map = ConvergenceMap(data=_map, angle=self._opening_angle*un.deg)
         _kappa, _pos = _map.locatePeaks(map_bins)
         
         _hist, _kappa = np.histogram(_kappa, bins=nbins, density=False)
@@ -230,10 +238,10 @@ class SkyArray:
         else:
             print(f"Image crop to x={xlimit} and y={ylimit}.")
             self.data[of] = zoom
-            self.opening_angle = np.int(
-                self.opening_angle * abs(np.diff(xlimit)) / self.npix
+            self._opening_angle = np.int(
+                self._opening_angle * abs(np.diff(xlimit)) / self._npix
             )
-            self.npix = zoom.shape[0]
+            self._npix = zoom.shape[0]
 
     def division(
         self,
@@ -295,7 +303,7 @@ class SkyArray:
         if rtn:
             return img
 
-    def convolution(
+    def filter(
         self,
         filter_dsc: dict,
         on: Optional[str] = None,
@@ -327,7 +335,7 @@ class SkyArray:
 
             clas = getattr(module, "Filters")
             fct = getattr(clas, filter_name)
-            _map = fct(_map, self.opening_angle, **args)
+            _map = fct(_map, self._opening_angle, **args)
             map_name.append(abbrev)
         if rtn:
             return _map
@@ -352,16 +360,16 @@ class SkyArray:
             gsn_map:
                 self.npix x self.npix np.array containing the GSN
         """
-        theta_pix = 60 * self.opening_angle / self.npix
+        theta_pix = 60 * self._opening_angle / self._npix
         std_pix = 0.007 #np.sqrt(std ** 2 / (2*theta_pix*ngal))
         if rnd_seed is None:
             self.data["gsn"] = np.random.normal(
-                loc=0, scale=std_pix, size=[self.npix, self.npix],
+                loc=0, scale=std_pix, size=[self._npix, self._npix],
             )
         else:
             rg = np.random.Generator(np.random.PCG64(rnd_seed))
             self.data["gsn"] = rg.normal(
-                loc=0, scale=std_pix, size=[self.npix, self.npix],
+                loc=0, scale=std_pix, size=[self._npix, self._npix],
             )
         print(f"The GSN map sigma is {np.std(self.data['gsn'])}", std_pix)
 
@@ -409,8 +417,8 @@ class SkyArray:
         """
         if rnd_seed:
             np.random.seed(rnd_seed)
-        Nx = Ny = self.npix
-        Lx = Ly = self.opening_angle * np.pi / 180.
+        Nx = Ny = self._npix
+        Lx = Ly = self._opening_angle * np.pi / 180.
 
         cl_tt_cmb = np.load(filepath_cl)[1]
         cmb = nmt.synfast_flat(
@@ -463,7 +471,7 @@ class SkyArray:
         else:
             _map = copy.deepcopy(sky_array)
         alpha_1, alpha_2 = SkyUtils.convert_convergence_to_deflection(
-            _map, self.npix, self.opening_angle
+            _map, self._npix, self._opening_angle
         )
         if rtn:
             return alpha_1, alpha_2

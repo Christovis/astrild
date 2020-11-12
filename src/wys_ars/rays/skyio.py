@@ -11,23 +11,21 @@ from wys_ars.io import IO
 
 class SkyIO:
     def transform_PandasDataFrame_to_Healpix(
-        df: pd.DataFrame, quantity: str, nside: int = 1024*4,
+        df: pd.DataFrame, quantity: str, nside: int,
     ) -> np.ndarray:
         """
         Used for wys_ars.rays.SkyMap
         Used for angular power spectrum calculation
         """
-        npix = hp.nside2npix(nside)
-        # Go from HEALPix coordinates to indices                                         
-        indices = hp.ang2pix(                                                            
+        df["pix"] = hp.ang2pix(                                                            
             nside,                                                                       
-            df["the_co"].values,#*180/np.pi,                                        
-            df["phi_co"].values,#*180/np.pi,                                        
-        )                                                                                
-        # Initiate the map and fill it with the values                                   
-        hpmap = np.ones(npix, dtype=np.float)*hp.UNSEEN                           
-        for i in range(nsources):                                                        
-            hpmap[indices[i]] = df[quantity].values[i]
+            df["the_co"].values,
+            df["phi_co"].values,
+        )
+        df = df.groupby(['pix']).mean()
+        hpmap = np.zeros(hp.nside2npix(nside), dtype=np.float)
+        hpmap[df.index.values] = df.loc[df.index.values][quantity]
+        hpmap[hpmap == 0.0] = hp.UNSEEN
         return hpmap
 
     def transform_PandasSeries_to_NumpyNdarray(

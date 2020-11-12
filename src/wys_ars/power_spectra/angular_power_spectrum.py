@@ -5,12 +5,13 @@ import subprocess
 import numpy as np
 import pandas as pd
 
+import healpy as hp
 from astropy import units as un
 import lenstools
 from lenstools import ConvergenceMap
-import healpy as hp
 
 from wys_ars.rays.skymap import SkyMap
+from wys_ars.rays.skys import SkyArray
 from wys_ars.rays.skyio import SkyIO
 from wys_ars.io import IO
 
@@ -18,7 +19,7 @@ class PowerSpectrum2DWarning(BaseException):
     pass
 
 
-class PowerSpectrum2D:
+class AngularPowerSpectrum:
     """
     Attributes:
 
@@ -36,34 +37,38 @@ class PowerSpectrum2D:
     @classmethod
     def from_array(
         cls,
-        skymap: np.ndarray,
+        skymap: Type[SkyArray],
+        on: str,
         multipoles: Union[List[float], np.array] = np.arange(200.0,50000.0,200.0),
     ) -> "PowerSpectrum2D":
         """
         Args:
         """
-        if "kappa" in skymap.quantity:
-            _map = ConvergenceMap(
-                data=skymap.data[on],
-                angle=skymap.opening_angle*un.deg
-            )
-            l, P = _map.powerSpectrum(multipoles)
-        return cls(l, P, skymap, on)
+        _map = ConvergenceMap(
+            data=skymap.data[on],
+            angle=skymap.opening_angle*un.deg
+        )
+        l, P = _map.powerSpectrum(multipoles)
+        return cls(l, P)
     
     @classmethod
     def from_healpix(
         cls,
-        skymap: SkyMap,
-        of: str = "orig",
-    ) -> "PowerSpectrum2D":
+        skymap: np.ndarray,
+        ell_lim: Optional[tuple] = None,
+    ) -> "AngularPowerSpectrum":
         """
         Get power spectrum from full-sky Healpix map.
 
         Args:
         """
         # measure full-sky
-        Cl = hp.anafast(skymap.data[of])
+        Cl = hp.anafast(skymap)
         ell = np.arange(len(Cl))
+        if ell_lim:
+            idx = np.logical_and(np.min(ell_lim) < ell, ell < np.max(ell_lim))
+            ell = ell[idx]
+            Cl = Cl[idx]
         return cls(ell, Cl)
     
     @classmethod
@@ -71,7 +76,7 @@ class PowerSpectrum2D:
         cls,
         skymap: SkyMap,
         of: str = "orig",
-    ) -> "PowerSpectrum2D":
+    ) -> "AngularPowerSpectrum":
         """
         Get power spectrum from spherical NaMaster map,
         but flat-sky maps also possible.
@@ -86,6 +91,32 @@ class PowerSpectrum2D:
         # measure full-sky
         Cl = nmt.compute_full_master(skymap.data[of], skymap.data[of], bins)
         return cls(ell, Cl)
+    
+    @classmethod
+    def from_parameters(
+        cls,
+        z: float,
+        H0: float = 67.74,
+        Om0: float = 0.3089,
+        Ob0: float = 0.0,
+        Ode0: float = 0.6911,
+    ) -> "AngularPowerSpectrum":
+        """
+        Args:
+            z:
+                Redshift.
+            H0:
+                Hubble constant today.
+            Om0:
+                Matter density today.
+            Ob0:
+                Baryon density today.
+            Ode0:
+                Dark Energy density today.
+        
+        Returns:
+        """
+        self.astropy_cosmo = LambdaCDM(**cosmo_params)
 
     def create_healpix(
         self,
@@ -127,3 +158,5 @@ class PowerSpectrum2D:
         )
         _filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
         return f"{dir_out}Cl_{_filename}.h5"
+
+
