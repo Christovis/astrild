@@ -1,8 +1,9 @@
 import os, sys, glob
 from typing import Dict, List, Optional, Union
 
-import numpy as np
 import pandas as pd
+import numpy as np
+import numba as nb
 
 import healpy as hp
 import astropy
@@ -14,30 +15,28 @@ class SkyIO:
         df: pd.DataFrame, quantity: str, nside: int,
     ) -> np.ndarray:
         """
-        Used for wys_ars.rays.SkyMap
-        Used for angular power spectrum calculation
+        Project data stored in pd.DataFrame to create HealPix map.
         """
-        df["pix"] = hp.ang2pix(                                                            
-            nside,                                                                       
-            df["the_co"].values,
-            df["phi_co"].values,
+        # find pixel id corresponding to a angular coordinate for a given NSIDE
+        df["pix_id"] = hp.ang2pix(                                                            
+            nside, df["the_co"].values, df["phi_co"].values,
         )
-        df = df.groupby(['pix']).mean()
+        # get mean of data values lying in same pixel
+        df = df.groupby(['pix_id']).mean()
         hpmap = np.zeros(hp.nside2npix(nside), dtype=np.float)
         hpmap[df.index.values] = df.loc[df.index.values][quantity]
         hpmap[hpmap == 0.0] = hp.UNSEEN
         return hpmap
 
-    def transform_PandasSeries_to_NumpyNdarray(
-        series: pd.Series
-    ) -> np.ndarray:
+    @nb.jit(nopython=True)
+    def transform_RayRamsesOutput_to_NumpyNdarray(values: np.array) -> np.ndarray:
         """
-        Used for any analysis of skymap features.
         """
-        _zip_array = sorted(zip(series.index.values, series.values,))
+        _index = np.arange(len(values))
+        _zip_array = sorted(zip(_index, values,))
         _values = np.array([j for (i, j) in _zip_array])
-        _npix = int(np.sqrt(len(series.values)))
-        array = np.zeros([_npix, _npix])
+        _npix = int(np.sqrt(len(values)))
+        array = np.zeros((_npix, _npix))
         k = 0
         for j in range(_npix):
             for i in range(_npix):
@@ -45,11 +44,8 @@ class SkyIO:
                 k += 1
         return array
     
-    def transform_NumpyNdarray_to_PandasSeries(
-        array: np.ndarray
-    ) -> pd.DataFrame:
+    def transform_NumpyNdarray_to_PandasSeries(array: np.ndarray) -> pd.DataFrame:
         """
-        Used for any analysis of skymap features.
         """
         #TODO
 

@@ -6,6 +6,7 @@ from importlib import import_module
 
 import pandas as pd
 import numpy as np
+from skimage import transform 
 from scipy.interpolate import RectBivariateSpline
 from sklearn.feature_extraction.image import extract_patches_2d
 from sklearn.feature_extraction.image import reconstruct_from_patches_2d
@@ -17,7 +18,6 @@ import lenstools
 from lenstools import ConvergenceMap
 import pymaster as nmt
 
-from wys_ars.simulation import Simulation
 from wys_ars.rays.utils import Filters
 from wys_ars.rays.skys.sky_utils import SkyUtils
 from wys_ars.rays.skyio import SkyIO
@@ -38,9 +38,11 @@ class SkyArray:
     search of voids and peaks.
 
     Attributes:
-        npix:
-        theta:
+        skymap:
+        opening_angle: [deg]
+        quantity:
         dirs:
+        map_file:
 
     Methods:
         from_file:
@@ -54,6 +56,7 @@ class SkyArray:
         zoom:
         division:
         merge:
+        convert_convergence_to_deflection:
     """
     def __init__(
         self,
@@ -63,7 +66,6 @@ class SkyArray:
         dirs: Dict[str, str],
         map_file: Optional[str] = None,
     ):
-        print("------------------", skymap.shape)
         self.data = {"orig": skymap}
         self._npix = skymap.shape[0]
         self._opening_angle = opening_angle
@@ -89,9 +91,7 @@ class SkyArray:
         Args:
             map_filename:
                 File path with which skymap pd.DataFrame can be loaded.
-            file_dsc:
-                Dictionary pointing to a file via {path, root, extension}.
-                Use when multiple skymaps need to be loaded.
+            opening_angle: [deg]
         """
         assert map_file, "There is no file being pointed at"
 
@@ -127,13 +127,11 @@ class SkyArray:
         Args:
             map_filename:
                 File path with which skymap pd.DataFrame can be loaded.
-            file_dsc:
-                Dictionary pointing to a file via {path, root, extension}.
-                Use when multiple skymaps need to be loaded.
+            opening_angle: [deg]
         """
         if convert_unit:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
-        map_array = SkyIO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
+        map_array = SkyIO.transform_RayRamsesOutput_to_NumpyNdarray(map_df[quantity].values)
         return cls.from_array(
             map_array, opening_angle, quantity, dir_in, map_file,
         )
@@ -153,9 +151,6 @@ class SkyArray:
         Args:
             map_filename:
                 File path with which skymap pd.DataFrame can be loaded.
-            file_dsc:
-                Dictionary pointing to a file via {path, root, extension}.
-                Use when multiple skymaps need to be loaded.
         """
         dirs = {"sim": dir_in}
         return cls(map_array, opening_angle, quantity, dirs, map_file)
@@ -166,7 +161,7 @@ class SkyArray:
     
     @property
     def opening_angle(self) -> float:
-        return self.opening_angle
+        return self._opening_angle
     
     def pdf(self, nbins: int, of: str="orig") -> dict:
         _pdf = {}
@@ -206,6 +201,21 @@ class SkyArray:
         peak_counts_df = pd.DataFrame(data=peak_counts_dic)
         return peak_counts_df
 
+    def resize(
+        self,
+        npix,
+        of: Optional[str] = None,
+        img: Optional[np.ndarray] = None,
+        rtn: bool = False,
+    ) -> Union[np.ndarray, None]:
+        if of:
+            img = copy.deepcopy(self.data[of])
+        img = transform.resize(image, (npix, npix), anti_aliasing=True,)
+        if rtn:
+            return img
+        else:
+            self.data[of] = img
+
     def crop(
         self,
         xlimit: Union[tuple, list],
@@ -213,7 +223,7 @@ class SkyArray:
         of: Optional[str] = None,
         img: Optional[np.ndarray] = None,
         rtn: bool = False,
-    ) -> np.ndarray:
+    ) -> Union[np.ndarray, None]:
         """
         Zoom into sky_array map.
 
@@ -463,6 +473,18 @@ class SkyArray:
         sky_array: Optional[np.ndarray] = None,
         rtn: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Args:
+            on:
+                String to indicate which map in self.data should be used.
+            sky_array:
+                2D convergence map.
+            rtn:
+                Bool to indicate whether to attach result to class object or return.
+
+        Returns:
+            alpha_1,2: 2D deflection angle map [rad]
+        """
         assert self.quantity in ["kappa_1", "kappa_2"], (
             "Deflection angle can only be calculated from the kappa map"
         )
@@ -471,7 +493,7 @@ class SkyArray:
         else:
             _map = copy.deepcopy(sky_array)
         alpha_1, alpha_2 = SkyUtils.convert_convergence_to_deflection(
-            _map, self._npix, self._opening_angle
+            _map, self._npix, self._opening_angle*un.deg,
         )
         if rtn:
             return alpha_1, alpha_2

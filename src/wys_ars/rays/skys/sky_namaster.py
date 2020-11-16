@@ -11,12 +11,9 @@ from scipy.ndimage.filters import convolve
 import astropy
 from astropy.io import fits
 from astropy import units as un
-import lenstools
-from lenstools import ConvergenceMap
 import healpy as hp
 import pymaster as nmt
 
-from wys_ars.simulation import Simulation
 from wys_ars.rays.utils import Filters
 from wys_ars.rays.skys.sky_utils import SkyUtils
 from wys_ars.rays.skyio import SkyIO
@@ -24,7 +21,6 @@ from wys_ars.io import IO
 
 dir_src = Path(__file__).parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
-c_light = 299792.458  # in km/s
 
 class SkyNamasterWarning(BaseException):
     pass
@@ -43,25 +39,18 @@ class SkyNamaster:
         dirs:
 
     Methods:
-        from_file:
-        pdf:
-        wl_peak_counts:
-        add_galaxy_shape_noise:
-        create_cmb:
-        create_mask:
-        convolution:
     """
     def __init__(
         self,
-        skymap: np.ndarray,
+        skyfield: np.ndarray,
         opening_angle: float,
         quantity: str,
         dirs: Dict[str, str],
         map_file: Optional[str] = None,
     ):
-        self.data = {"orig": skymap}
-        self.nside = hp.get_nside(skymap)
-        self.npix = hp.nside2npix(self.nside)
+        self.data = {"orig": skyfield}
+        self._nside = hp.get_nside(skyfield)
+        self._npix = hp.nside2npix(self._nside)
         self.opening_angle = opening_angle
         self.quantity = quantity
         self.dirs = dirs
@@ -88,7 +77,7 @@ class SkyNamaster:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
         """
-        assert map_file, SkyMapWarning('There is no file being pointed at')
+        assert map_file, SkyNamasterWarning('There is no file being pointed at')
 
         file_extension = map_file.split(".")[-1]
         if file_extension == "h5":
@@ -98,6 +87,11 @@ class SkyNamaster:
             )
         elif file_extension == "fits":
             map_array = hp.read_map(map_file)
+            return cls.from_array(
+                map_array, opening_angle, quantity, dir_in, map_file
+            )
+        elif file_extension == "npy":
+            map_array = np.load(map_file)
             return cls.from_array(
                 map_array, opening_angle, quantity, dir_in, map_file
             )
@@ -157,7 +151,22 @@ class SkyNamaster:
         Transform SkyHealpix to SkyNamaster.
         """
         f_0 = nmt.NmtField(self.data["mask"], [self.data[which]])
-    
+
+    def resize(
+        self,
+        npix,
+        of: Optional[str] = None,
+        img: Optional[np.ndarray] = None,
+        rtn: bool = False,
+    ) -> Union[np.ndarray, None]:    
+        if of:
+            img = copy.deepcopy(self.data[of])
+        img = transform.resize(image, (npix, npix), anti_aliasing=True,)
+        if rtn:                                          
+            return img                                   
+        else:                                            
+            self.data[of] = img
+
     def create_cmb(
         self,
         filepath_cl: str,
@@ -200,58 +209,3 @@ class SkyNamaster:
         self.data[on] = hp.ma(self.data[on])
         self.data[on].mask = self.data["mask"]
 
-    def create_mask(self, theta: float, nside: int) -> None:
-        """
-        Mask out unobserved patches of the full-sky.
-
-        Args:
-            theta:
-                Edge length of the square field-of-view [deg]
-            nside:
-                Nr. of pixels per edge of the output full-sky map
-        """
-        if nside is None:
-            nside = self.nside
-        npix = hp.nside2npix(nside)
-        # angular positions of all healpix pixels
-        pixel_theta, pixel_phi = hp.pix2ang(nside, np.arange(npix))
-        # range of ra and dec of the field-of-view
-        ras = np.array([90-theta/2, 90+theta/2]) * np.pi/180  #[rad]
-        decs = np.array([theta/2, 360-theta/2]) * np.pi/180   #[rad]
-        # create mask
-        mask = np.ones(npix, dtype=np.bool)
-        mask[pixel_theta < ras[0]] = 0
-        mask[pixel_theta > ras[1]] = 0
-        mask[(decs[0] < pixel_phi) & (pixel_phi < decs[1])] = 0
-        # smooth transition between fov and mask (not available in healpy)
-        self.data["mask"] = nmt.mask_apodization(mask, 2.5, apotype="C2")
-
-    def rotate(
-        self,
-        theta: float,
-        phi: float,
-        which: str,
-    ) -> np.ndarray:
-        """
-        Rotate the full-sky.
-
-        Args:
-            theta and phi:
-                Rotational angles [deg]
-            which:
-                Identify which map in self.data should be rotated.
-        """
-        if (theta is None) or (phi is None):
-            theta = np.random.random()*180
-            phi = np.random.random()*180
-        
-        nside = hp.npix2nside(len(skymap))
-        # Get theta, phi for non-rotated map
-        t, p = hp.pix2ang(nside, np.arange(hp.nside2npix(nside))) #theta, phi
-        # Define a rotator
-        r = hp.Rotator(deg=True, rot=[theta,phi])
-        # Get theta, phi under rotated co-ordinates
-        trot, prot = r(t,p)
-        # Interpolate map onto these co-ordinates
-        _skymap = hp.get_interp_val(skymap, trot, prot)
-        return _skymap

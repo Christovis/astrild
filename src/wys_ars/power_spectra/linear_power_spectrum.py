@@ -139,10 +139,7 @@ class LinearPowerSpectrum:
         return cambcosmo
 
     def P_dpdp(
-        self,
-        z: float,
-        k: np.array,
-        scale: bool = False,
+        self, z: float, k: np.array, scale: bool = False,
     ) -> np.array:
         """
         Function of linear power spectrum of the ISW effect P_dpdp(k,t)
@@ -161,26 +158,26 @@ class LinearPowerSpectrum:
                 Background Growth factor.
         """
         _p_dd = self.Pk_dd(k)
-        a = 1/(z + 1)  # scale factor
-        D = background_fcts.D1(a)
-        f = background_fcts.f1(a)
+        _a = 1/(z + 1)  # scale factor
+        D = self.background_fcts.D1(_a)
+        f = self.background_fcts.f1(_a)
         
-        E = np.sqrt(Om0*(1+z)**3 + Ode0)  # astropycosmo.efunc(z)  #H(z)/H0
-        Hz = E*H0
-        prefac_dynamic = (Hz*D*(1-f)/a)**2
-        prefac_static = 9/4 * (H0/k)**4 * Om0**2
+        _E = np.sqrt(self.Om0*(1+z)**3 + self.Ode0)  # astropycosmo.efunc(z)  #H(z)/H0
+        _Hz = _E*self.H0
+        prefac_dynamic = (_Hz*D*(1-f)/_a)**2
+        prefac_static = 9/4 * (self.H0/k)**4 * self.Om0**2
         
         # power spectrum of dt of matter potential fluctuations
         if scale is True:
             print("scaling")
             #p_dpdp = k**3/(2*np.pi**2) * prefac_dynamic * _p_dd
             p_dpdp = (D*(1-f))**2/k**4 * _p_dd
-        elif scale is False:
+        elif scale == "I don't know":
             p_dpdp = k**3/(2*np.pi**2) * prefac_static * prefac_dynamic * _p_dd
-        else:
-            H0 = 100 # astropycosmo.H0.value
-            Hz = E*H0
-            prefac_dynamic = Hz * (D*(1-f))**2
+        elif scale is False:
+            _H0 = 100 # astropycosmo.H0.value
+            _Hz = _E*_H0
+            prefac_dynamic = _Hz * (D*(1-f))**2
             p_dpdp = prefac_static * prefac_dynamic * _p_dd
 
         return p_dpdp

@@ -1,7 +1,7 @@
 import os, sys, glob, copy
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union, Type
 
 import pandas as pd
 import numpy as np
@@ -47,8 +47,12 @@ class SkyHealpix:
         from_file:
         pdf:
         wl_peak_counts:
+        add_field:
         add_galaxy_shape_noise:
+        create_galaxy_shape_noise:
+        add_cmb:
         create_cmb:
+        add_mask:
         create_mask:
         convolution:
     """
@@ -61,15 +65,15 @@ class SkyHealpix:
         map_file: Optional[str] = None,
     ):
         self.data = {"orig": skymap}
-        self.nside = hp.get_nside(skymap)
-        self.npix = hp.nside2npix(self.nside)
+        self._nside = hp.get_nside(skymap)
+        self._npix = hp.nside2npix(self.nside)
         self.opening_angle = opening_angle
         self.quantity = quantity
         self.dirs = dirs
         self.map_file = map_file
 
     @classmethod
-    def from_file(
+    def from_sky_file(
         cls,
         map_file: str,
         opening_angle: float,
@@ -90,22 +94,26 @@ class SkyHealpix:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
         """
-        assert map_file, SkyMapWarning('There is no file being pointed at')
-
         file_extension = map_file.split(".")[-1]
+        assert file_extension in ["h5", "fits", "npy"], SkyHealpixWarning(f"The file formart {file_extension} is not supported.")
         if file_extension == "h5":
             map_df = pd.read_hdf(map_file, key="df")
-            return cls.from_dataframe(
+            return cls.from_sky_dataframe(
                 map_df, opening_angle, nside, quantity, dir_in, map_file, convert_unit,
             )
         elif file_extension == "fits":
             map_array = hp.read_map(map_file)
-            return cls.from_array(
+            return cls.from_sky_array(
+                map_array, opening_angle, quantity, dir_in, map_file,
+            )
+        elif file_extension == "npy":
+            map_array = np.load(map_file)
+            return cls.from_sky_array(
                 map_array, opening_angle, quantity, dir_in, map_file,
             )
     
     @classmethod
-    def from_dataframe(
+    def from_sky_dataframe(
         cls,
         map_df: pd.DataFrame,
         opening_angle: float,
@@ -128,12 +136,12 @@ class SkyHealpix:
         if convert_unit:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
         map_array = SkyIO.transform_PandasDataFrame_to_Healpix(map_df, quantity, nside)
-        return cls.from_array(
+        return cls.from_sky_array(
             map_array, opening_angle, quantity, dir_in, map_file,
         )
     
     @classmethod
-    def from_array(
+    def from_sky_array(
         cls,
         map_array: np.array,
         opening_angle: float,
@@ -154,20 +162,83 @@ class SkyHealpix:
         dirs = {"sim": dir_in}
         map_array = hp.ma(map_array)  # mask out bad values (e.g Nan)
         return cls(map_array, opening_angle, quantity, dirs, map_file)
+    
+    @classmethod
+    def from_Cl_file(
+        cls,
+        cl_file: str,
+        quantity: str,
+        dir_in: str,
+        nside: int,
+        lmax: int,
+        opening_angle: int = 41253,
+    ) -> "SkyHealpix":
+        """
+        Initialize class by reading the skymap data from pandas hdf5 file
+        or numpy array.
+        The file can be pointed at via map_filename or file_dsc.
 
-    def to_namaster(self):
+        Args:
+            map_filename:
+                File path with which skymap pd.DataFrame can be loaded.
+            file_dsc:
+                Dictionary pointing to a file via {path, root, extension}.
+                Use when multiple skymaps need to be loaded.
+        """
+        file_extension = cl_file.split(".")[-1]
+        assert file_extension in ["npy"], SkyHealpixWarning(f"The file formart {file_extension} is not supported.")
+        if file_extension == "npy":
+            cl_array = np.load(cl_file)
+            return cls.from_array(
+                cl_array, quantity, dir_in, nside, lmax, opening_angle, cl_file,
+            )
+    
+    @classmethod
+    def from_Cl_array(
+        cls,
+        cl_array: np.array,
+        quantity: str,
+        nside: int,
+        lmax: int,
+        opening_angle: int = 41253,
+        dir_in: Optional[str] = None,
+        cl_file: Optional[str] = None,
+    ) -> "SkyHealpix":
+        """
+        Args:
+            opening_angle:
+                [deg^2]
+        """
+        dirs = {"sim": dir_in}
+        map_array = hp.sphtfunc.synfast(cl_array, nside=nside, lmax=lmax)
+        return cls(map_array, opening_angle, quantity, dirs, cl_file)
+
+    @property
+    def nside(self):
+        return self._nside
+    
+    @property
+    def npix(self):
+        return self._npix
+
+    def to_namaster(self, apodization_width: float = 2.5):
         """
         Transform SkyHealpix to SkyNamaster.
         """
-        sky_array = nmt.NmtField(self.data["mask"], [self.data[which]])
-        return SkyNamaster.from_array(
-            sky_array,
-            self.npix,
-            self.opening_angle,
-            self.quantity,
-            self.dirs,
-            self.map_file,
-        )
+        _skyarray = copy.deepcopy(self.data["orig"])
+        _skyarray[~self.data["mask"]] = hp.UNSEEN
+        _mask = copy.deepcopy(self.data["mask"]) * 1
+        _mask = nmt.mask_apodization(_mask, apodization_width, apotype="C2")
+        print("------------->", _mask.shape)
+        self.data["nm"] = nmt.NmtField(_mask, [_skyarray])
+        #return SkyNamaster.from_array(
+        #    sky_field,
+        #    self._npix,
+        #    self.opening_angle,
+        #    self.quantity,
+        #    self.dirs,
+        #    self.map_file,
+        #)
     
     def create_cmb(
         self,
@@ -192,13 +263,36 @@ class SkyHealpix:
             cmb_map:
         """
         if nside is None:
-            nside = self.nside
+            nside = self._nside
         cl_cmb = np.load(filepath_cl)
         np.random.seed(rnd_seed)
         self.data["cmb"] = hp.sphtfunc.synfast(cmb_tt, nside=nside, lmax=lmax)
 
     def sum_of_maps(self, map1: str, map2: str) -> None:
         self.data[f"{map1}_{map2}"] = self.data[map1] + self.data[map2]
+    
+    def arithmetic_operation_with(
+        self,
+        skymap: np.array,
+        on: str,
+        operation: np,
+    ) -> None:
+        """
+        Use Numpy function to perform one of the basic arithmetic operations:
+            add, substract, multiply, divide
+        of two Healpix fields.
+
+        Args:
+            skymap:
+            on:
+            operation:
+        """
+        _pixel_idx = np.arange(self._npix)
+        _unmasked_pixel_idx = _pixel_idx[~self.data[on].mask]
+        self.data[on].data[_unmasked_pixel_idx] = operation(
+            self.data[on].data[_unmasked_pixel_idx],
+            skymap[_unmasked_pixel_idx]
+        )
     
     def add_mask(
         self,
@@ -224,17 +318,17 @@ class SkyHealpix:
         """
         print("create_mask", theta)
         # angular positions of all healpix pixels
-        pixel_theta, pixel_phi = hp.pix2ang(self.nside, np.arange(self.npix))
+        _pixel_index = np.arange(self._npix)
+        pixel_theta, pixel_phi = hp.pix2ang(self._nside, _pixel_index)
         # range of ra and dec of the field-of-view
         ras = np.array([90-theta/2, 90+theta/2]) * np.pi/180  #[rad]
         decs = np.array([theta/2, 360-theta/2]) * np.pi/180   #[rad]
         # create mask
-        mask = np.zeros(self.npix, dtype=np.bool)
+        mask = np.zeros(self._npix, dtype=np.bool)
         mask[pixel_theta < ras[0]] = 1
         mask[pixel_theta > ras[1]] = 1
         mask[(decs[0] < pixel_phi) & (pixel_phi < decs[1])] = 1
-        # smooth transition between fov and mask (not available in healpy)
-        self.data["mask"] = nmt.mask_apodization(mask, 2.5, apotype="C2")
+        self.data["mask"] = mask
         self.mask_theta = theta
 
     def rotate(
@@ -258,7 +352,8 @@ class SkyHealpix:
             phi = np.random.random()*180
         
         # Get theta, phi for non-rotated map
-        t, p = hp.pix2ang(self.nside, np.arange(self.npix))
+        _pixel_index = np.arange(self._npix)
+        t, p = hp.pix2ang(self._nside, _pixel_index)
         # Define a rotator
         r = hp.Rotator(deg=True, rot=[theta,phi])
         # Get theta, phi under rotated co-ordinates

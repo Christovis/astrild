@@ -9,7 +9,11 @@ from scipy.interpolate import interp1d
 from scipy import integrate
 from sklearn.neighbors import NearestNeighbors
 
+from joblib import Parallel, delayed
+import multiprocessing
+
 from astropy import units as un
+from astropy.constants import c as c_light
 from lenstools import ConvergenceMap
 
 from wys_ars.rays.utils import object_selection
@@ -18,6 +22,20 @@ from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.utils.filters import Filters
 from wys_ars.profiles import profile_2d as Profiles2D
 from wys_ars.io import IO
+
+default_dipole_vel_tx = {
+    "gaussian_high_pass": {"abbrev": "hpf", "theta_i": 5},
+    "gaussian_third_derivative_2": {"abbrev": "x3df", "theta_i": rad_pix, "direction": 1},
+    "apodization": {"abbrev": "apo", "theta_i": rad_pix*10},
+}
+default_dipole_vel_ty = {
+    "gaussian_high_pass": {"abbrev": "hpf", "theta_i": 5},
+    "gaussian_third_derivative_2": {"abbrev": "y3df", "theta_i": rad_pix, "direction": 0},
+    "apodization": {"abbrev": "apo", "theta_i": rad_pix*10},
+}
+
+# store available nr. of cpus for parallel computation
+ncpus_available = multiprocessing.cpu_count()
 
 class DipolesWarning(BaseException):
     pass
@@ -66,7 +84,6 @@ class Dipoles:
         if filters is True:
             skymap = cls._filter(skymap, kernel_width, direction)
        
-        print("----------------", skymap.data[bin_dsc["on"]].shape)
         thresholds = cls._get_convergence_thresholds(
             sky_array=skymap.data[bin_dsc["on"]],
             nbins=bin_dsc["nbins"],
@@ -302,28 +319,77 @@ class Dipoles:
                 ids[nan_idx] = -99999
                 distances[nan_idx] = -99999
         return list(distances), list(ids)
+    
+    def transverse_velocities(
+        self,
+        deltaTmap: Type[SkyArray],
+        kappamap: Type[SkyArray],
+        halo_df: pd.DataFrame,
+        filter_dsc: dict,
+    ) -> None:
 
-    def _get_transverse_velocity(
-        self, iswrssky: Type[SkyMap], defltxsky: Type[SkyMap], defltysky: Type[SkyMap],
+
+        _cl_tt = Parallel(
+            n_jobs=self._ncpus,
+            #verbose=verbosity_level,
+            #backend="threading",
+        )(delayed(integration)(dip) for idx, dip in self.data.iterrows())
+
+        def _rountine():
+            scale = 20
+            xlim = (dip_cen_pix[1]-rad_pix*scale, dip_cen_pix[1]+rad_pix*scale)
+            ylim = (dip_cen_pix[0]-rad_pix*scale, dip_cen_pix[0]+rad_pix*scale)
+
+            deltaTmap_zoom = SkyArray.from_array(
+                skyiswrs.data["orig"][xlim[0]:xlim[1], ylim[0]:ylim[1]],
+                opening_angle=2*30*rad_deg,
+                quantity="isw_rs",
+                dir_in=dir_map,
+            )
+            kappamap_zoom = SkyArray.from_array(
+                skykappa.data["orig"][xlim[0]:xlim[1], ylim[0]:ylim[1]],
+                opening_angle=2*30*rad_deg,
+                quantity="kappa_2",
+                dir_in=dir_map,
+            )
+            kappamap_zoom.convert_convergence_to_deflection(on="orig", rtn=False)
+
+            if filter_dsc is None:
+                filter_dsc_x = default_dipole_vel_tx
+                filter_dsc_y = default_dipole_vel_ty
+            deltaTmap_zoom.filter(filter_dsc_x, on="orig", rtn=False)
+            deltaTmap_zoom.data["x"] = skyiswrs_z.data.pop("orig_hpf_x3df_apo")
+            deltaTmap_zoom.filter(filter_dsc_y, on="orig", rtn=False)
+            deltaTmap_zoom.data["y"] = skyiswrs_z.data.pop("orig_hpf_y3df_apo")
+            kappamap_zoom.filter(filter_dsc, on="defltx", rtn=False)
+            kappamap_zoom.data["x"] = skykappa_z.data.pop("defltx_hpf_x3df_apo")
+            kappamap_zoom.filter(filter_dsc, on="deflty", rtn=False)
+            kappamap_zoom.data["y"] = skykappa_z.data.pop("deflty_hpf_x3df_apo")
+
+            x_vel, y_vel = self._get_transverse_velocity(
+                deltaTmap_zoom.data["x"], deltaTmap_zoom.data["y"],
+                kappamap_zoom.data["x"], kappamap_zoom.data["y"],
+            )
+
+    @staticmethod
+    def get_transverse_velocity(
+        deltaTx: np.ndarray, deltaTy: np.ndarray, alphax: np.ndarray, alphay: np.ndarray,
     ) -> tuple:
         """
         Velocity vector component from ISWRS and deflection angle map.
         Eq. 9 in arxiv:1812.04241
-        """
-        x_vel = self._get_transverse_velocity_component(
-            iswrssky.data["orig_hpf_x3df_apo"], defltxsky.data["orig_x3df_apo"]
-        )
-        y_vel = self._get_transverse_velocity_component(
-            iswrssky.data["orig_hpf_y3df_apo"], defltysky.data["orig_y3df_apo"]
-        )
-        return x_vel, y_vel
 
-    def _get_transverse_velocity_component(
-        self, iswrs: np.ndarray, kappa: np.ndarray,
-    ) -> float:
+        Args:
+            deltaTx,y:
+                Filtered ISW-RS/temp. perturbation maps [-]
+            alphax,y:
+                Filtered deflection angle maps [rad]
+        Returns:
+            x,y-components of the transverse velocity [km/sec]
         """
-        Velocity vector component from ISWRS and deflection angle map.
-        Eq. 9 in arxiv:1812.04241
-        """
-        c_light = 299792.458  #[km/s]
-        return -c_light * np.sum(iswrs) / np.sum(kappa)
+        def _get_transverse_velocity_component(deltaT, alpha,) -> float:
+            return -c_light.to('km/s').value * np.sum(deltaT) / np.sum(alpha)
+        
+        x_vel = _get_transverse_velocity_component(deltaTx, alphax)
+        y_vel = _get_transverse_velocity_component(deltaTy, alphay)
+        return x_vel, y_vel

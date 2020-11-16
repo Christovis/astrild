@@ -10,7 +10,8 @@ from astropy import units as un
 import lenstools
 from lenstools import ConvergenceMap
 
-from wys_ars.rays.skymap import SkyMap
+from wys_ars.rays.skys import SkyNamaster
+from wys_ars.rays.skys import SkyHealpix
 from wys_ars.rays.skys import SkyArray
 from wys_ars.rays.skyio import SkyIO
 from wys_ars.io import IO
@@ -64,7 +65,7 @@ class AngularPowerSpectrum:
         """
         # measure full-sky
         Cl = hp.anafast(skymap)
-        ell = np.arange(len(Cl))
+        ell = np.arange(len(Cl), dtype=float)
         if ell_lim:
             idx = np.logical_and(np.min(ell_lim) < ell, ell < np.max(ell_lim))
             ell = ell[idx]
@@ -74,8 +75,8 @@ class AngularPowerSpectrum:
     @classmethod
     def from_namaster(
         cls,
-        skymap: SkyMap,
-        of: str = "orig",
+        skyfield: np.ndarray,
+        nside: Optional[int] = None,
     ) -> "AngularPowerSpectrum":
         """
         Get power spectrum from spherical NaMaster map,
@@ -86,43 +87,19 @@ class AngularPowerSpectrum:
             mask:
         """
         # chose multiploes for measurement
-        bins = nmt.NmtBin.from_nside_linear(skymap.nside, 4)
+        nside = hp.npix2nside(np.arange(len(skymap)))
+        bins = nmt.NmtBin.from_nside_linear(nside, 4)
         ell = bins.get_effective_ells()
         # measure full-sky
-        Cl = nmt.compute_full_master(skymap.data[of], skymap.data[of], bins)
+        Cl = nmt.compute_full_master(skyfield, skyfield, bins)
         return cls(ell, Cl)
     
-    @classmethod
-    def from_parameters(
-        cls,
-        z: float,
-        H0: float = 67.74,
-        Om0: float = 0.3089,
-        Ob0: float = 0.0,
-        Ode0: float = 0.6911,
-    ) -> "AngularPowerSpectrum":
-        """
-        Args:
-            z:
-                Redshift.
-            H0:
-                Hubble constant today.
-            Om0:
-                Matter density today.
-            Ob0:
-                Baryon density today.
-            Ode0:
-                Dark Energy density today.
-        
-        Returns:
-        """
-        self.astropy_cosmo = LambdaCDM(**cosmo_params)
-
-    def create_healpix(
+    def to_skyhealpix(
         self,
         nside: Optional[int]=None,
+        lmax: Optional[int]=None,
         rnd_seed: Optional[int]=None,
-    ) -> np.ndarray:
+    ) -> Type[SkyHealpix]:
         """
         Generate Healpix map from power spectrum.
         """
@@ -130,8 +107,8 @@ class AngularPowerSpectrum:
             nside = self.nside
         if nside is not None:
             np.random.seed(rnd_seed)
-        skymap = hp.synfast(self.P, nside)
-        return skymap
+
+        return SkyHealpix.from_Cl_array(self.P, quantity=None, dir_in=None,)
 
     def to_file(self, dir_out: str, extention: str = "h5") -> None:
         """ 
@@ -158,5 +135,3 @@ class AngularPowerSpectrum:
         )
         _filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
         return f"{dir_out}Cl_{_filename}.h5"
-
-

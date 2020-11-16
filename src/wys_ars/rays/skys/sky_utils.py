@@ -1,18 +1,18 @@
-import os
+import os, time
 from typing import Tuple
 import ctypes as ct
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
-import numba as nb
 
-c_light = 299792.458  # [km/s]
+from astropy import units as un
+from astropy.constants import c as c_light
+
 c_lib_path = Path(__file__).parent.absolute()
 
 
 class SkyUtils:
-    @nb.jit(nopython=True)
     def convert_code_to_phy_units(
         quantity: str, map_df: pd.DataFrame,
     ) -> pd.DataFrame:
@@ -20,11 +20,11 @@ class SkyUtils:
         Convert from RayRamses code units to physical units.
         """
         if quantity in ["shear_x", "shear_y", "deflt_x", "deflt_y", "kappa_2"]:
-            map_df.loc[:, [quantity]] /= c_light ** 2
+            map_df.loc[:, [quantity]] /= c_light.to('km/s').value**2
         elif quantity in ["isw_rs"]:
-            map_df.loc[:, [quantity]] /= c_light ** 3
+            map_df.loc[:, [quantity]] /= c_light.to('km/s').value**3
         return map_df
-    
+
     def convert_convergence_to_deflection(
         kappa: np.ndarray,
         npix: int,
@@ -35,12 +35,15 @@ class SkyUtils:
             kappa:
                 Convergence map
             opening_angle:
-                Edge length of field-of-view [degree]
+                Edge length of field-of-view [any unit convertable to radiant]
             npix:
                 Number of pixels along edge of field-of-view
+
+        Returns:
+            alpha1,2:
+                deflection angle in units of opening_angle
         """
-        opening_angle *= 3600  # convert degree in arcsec
-        alpha1, alpha2 = _call_cal_alphas(kappa, npix, opening_angle)
+        alpha1, alpha2 = _call_alphas(kappa, npix, (opening_angle).to(un.rad).value)
         return alpha1, alpha2
 
 def _make_r_coor(
@@ -60,7 +63,7 @@ gls.kappa0_to_alphas.argtypes = [
     np.ctypeslib.ndpointer(dtype = ct.c_double),
 ]
 gls.kappa0_to_alphas.restype  = ct.c_void_p
-def _call_cal_alphas(
+def _call_alphas(
     kappa: np.ndarray, npix: int, opening_angle: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
     _kappa = np.array(kappa, dtype=ct.c_double)

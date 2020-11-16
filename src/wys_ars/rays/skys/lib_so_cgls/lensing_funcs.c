@@ -84,8 +84,17 @@ void kernel_alphas_iso(int Ncc,double *in1,double *in2,double Dcell) {
 
 //--------------------------------------------------------------------
 void kappa0_to_alphas(double * kappa0, int Nc, double bsz, double * alpha1, double * alpha2) {
-    /* Wertz, Olivier, and Jean Surdej; MNRAS 437.2 (2013): 1051-1055. */
-	/* M. Bartelmann 2003 https://arxiv.org/pdf/astro-ph/0304162.pdf */
+    /* Wertz, Olivier, and Jean Surdej; MNRAS 437.2 (2013): 1051-1055.
+     * M. Bartelmann 2003 https://arxiv.org/pdf/astro-ph/0304162.pdf
+     *
+     * Args:
+     *      kappa0: 2D convergence map
+     *      Nc: number of pixels along one edge of the map
+     *      bsz: opening angle of the map
+     *      alpha1,2: empty 2D deflection angle arrays in units of bsz
+     *
+     * Returns: alpha1,2
+    */
     int Nc2 = Nc*2;
 	double dsx = bsz/(double)Nc;
 

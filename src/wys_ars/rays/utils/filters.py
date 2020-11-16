@@ -17,7 +17,6 @@ from lenstools import ConvergenceMap
 #mpi_rank = mpi_comm.Get_rank()
 #mpi_size = mpi_comm.Get_size()
 
-
 class Filters:
     """
     Collection of filters for lensing convergence
@@ -26,11 +25,13 @@ class Filters:
     fields.
 
     Methods:
-        fast_ica:
+        dictionary_learning:
+        pca:
         gaussian:
         gaussian_low_pass:
         gaussian_high_pass:
         gaussian_compensated:
+        apodization:
         gaussian_third_derivative:
         tophat_compensated:
     """

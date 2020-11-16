@@ -48,18 +48,22 @@ class LinearAngularPowerSpectrum:
         cambcosmo: camb.CAMBparams,
         astropycosmo: LambdaCDM,
         lps: LinearPowerSpectrum,
+        ncpus: int,
     ):
         self._z_range = z_range
         self._ell_range = ell_range
         self.cambcosmo = cambcosmo
         self.astropycosmo = astropycosmo
         self.lps = lps
+        if ncpus == 0:
+            self._ncpus = ncpus_available
+        self._C_tt_outdated = True
 
     @classmethod
     def from_parameters(
         cls,
-        z_range: np.array,
-        ell_range: np.array,
+        z_array: np.array,
+        ell_array: np.array,
         H0: float = 67.74,
         Om0: float = 0.3089,
         Ob0: float = 0.0482754208891869,
@@ -67,6 +71,7 @@ class LinearAngularPowerSpectrum:
         T0_cmb: float = 2.7255,
         As: float = 2.105e-9,
         ns: float = 0.9665,
+        ncpus: int = 1,
     ) -> "LinearAngularPowerSpectrum":
         """
         Args:
@@ -94,20 +99,21 @@ class LinearAngularPowerSpectrum:
             "As": As,
             "ns": ns,
         }
-        return cls.from_dictionary(z_range, ell_range, dic)
+        return cls.from_dictionary(z_array, ell_array, dic, ncpus)
     
     @classmethod
     def from_dictionary(
         cls,
-        z_range: np.array,
-        ell_range: np.array,
+        z_array: np.array,
+        ell_array: np.array,
         dic: dict,
+        ncpus: int,
     ) -> "LinearAngularPowerSpectrum":
         # initialize linear power spetrum class
         cambcosmo = cls.init_camb_cosmos_from_astropy_cosmos(dic)
         lps = LinearPowerSpectrum.from_dictionary(dic)
         astropycosmo = LambdaCDM(**dic)
-        return cls(z_range, ell_range, cambcosmo, astropycosmo, lps)
+        return cls(z_array, ell_array, cambcosmo, astropycosmo, lps, ncpus)
 
     @staticmethod
     def init_camb_cosmos_from_astropy_cosmos(dic: dict,) -> camb.CAMBparams:
@@ -131,19 +137,33 @@ class LinearAngularPowerSpectrum:
         self._cl_outdated = True
  
     @property
-    def ell_range(self):
+    def ell(self):
         return self._ell_range
     
-    @ell_range.setter
-    def ell_range(self, val: np.array):
+    @ell.setter
+    def ell(self, val: np.array):
         self._ell_range = val
-        self._cl_outdated = True
+        self._C_tt_outdated = True
     
-    def compute_C_tt(
-        self,
-        integration_variable: str,
-        ncpus: int = 1,
-    ) -> np.ndarray:
+    @property
+    def ncpus(self):
+        return self._ncpus
+    
+    @ncpus.setter
+    def ncpus(self, val: int):
+        if ncpus == 0:
+            self._ncpus = ncpus_available
+        else:
+            self._ncpus = val
+    
+    @property
+    def Cl(self):
+        if self._C_tt_outdated:
+            self.compute_C_tt()
+        return self._C_tt
+    
+    
+    def compute_C_tt(self) -> None:
         """
         Angular auto temperature fluctuation power spectrum.
 
@@ -151,46 +171,34 @@ class LinearAngularPowerSpectrum:
             ncpus:
                 Nr. of CPUs. If ncpus=0 than it will use all existing CPUs.
         """
-        _integration_variable = {"name": integration_variable}
-        if _integration_variable["name"] == "lookback_time":
-            _integration_variable["values"] = np.asarray([
-                self.astropycosmo.lookback_time(z).value for z in self._z_range
-            ])*1e9  #[yrs] double check
-        elif _integration_variable["name"] == "redshift":
-            _integration_variable["values"] = self._z_range
 
         def integration(ell):
             return quad(
                 self.p_dpdp_integrant,
-                _integration_variable["values"].min(),
-                _integration_variable["values"].max(),
+                self._z_range.min(),
+                self._z_range.max(),
                 args=(
                     ell,
-                    _integration_variable["name"],
                     self.astropycosmo,
                     self.lps,
                 ),
                 epsabs=0, epsrel=1e-6
             )[0]
 
-        if ncpus == 0:
-            ncpus = ncpus_available
-        
-        print(f"just about to start with {ncpus}")
+        print(f"just about to start with {self._ncpus}")
         _cl_tt = Parallel(
-            n_jobs=ncpus,
+            n_jobs=self._ncpus,
             #verbose=verbosity_level,
             #backend="threading",
         )(delayed(integration)(ell) for ell in self._ell_range)
 
-        self.Cl_tt = np.array(_cl_tt) * 4/const.c.to(un.km/un.second).value**5
-        self._cl_outdated = False
+        self._C_tt = np.array(_cl_tt) * 4/const.c.to(un.km/un.second).value**5
+        self._C_tt_outdated = False
 
     @staticmethod
     def p_dpdp_integrant(
         dx: float,
         ell: float,
-        dx_name: str,
         astropycosmo: LambdaCDM,
         lps: LinearPowerSpectrum,
     ) -> np.array:
@@ -201,12 +209,8 @@ class LinearAngularPowerSpectrum:
         Args:
         Returns:
         """
-        if dx_name == "lookback_time":
-            z = z_at_value(astropycosmo.lookback_time, dx/1e9*un.Gyr)
-            prefac = 1
-        else:
-            z = dx
-            prefac = 1  #1/(1 + z)**2
+        z = dx
+        prefac = 1/(1 + z)**2
 
         chi = astropycosmo.comoving_distance(z).to(
             un.Mpc/un.littleh, un.with_H0(astropycosmo.H0)
