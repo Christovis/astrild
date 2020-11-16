@@ -218,8 +218,8 @@ class SkyArray:
 
     def crop(
         self,
-        xlimit: Union[tuple, list],
-        ylimit: Union[tuple, list],
+        xlimit: Union[tuple, list, np.array],
+        ylimit: Union[tuple, list, np.array],
         of: Optional[str] = None,
         img: Optional[np.ndarray] = None,
         rtn: bool = False,
@@ -236,13 +236,13 @@ class SkyArray:
         """
         if of:
             img = copy.deepcopy(self.data[of])
-        npix = img.shape[0]
         xlimit = np.asarray(xlimit)
         ylimit = np.asarray(ylimit)
         if isinstance(xlimit[0], float):
-            xlimit = (npix * xlimit/100).astype(int)
-            ylimit = (npix * ylimit/100).astype(int)
-        zoom = img[int(xlimit[0]):int(xlimit[1]), int(ylimit[0]):int(ylimit[1])]
+            _npix = img.shape[0]
+            xlimit = (_npix * xlimit/100).astype(int)
+            ylimit = (_npix * ylimit/100).astype(int)
+        zoom = img[xlimit[0]:xlimit[1], ylimit[0]:ylimit[1]]
         if rtn:
             return zoom
         else:
@@ -324,7 +324,7 @@ class SkyArray:
         Convolve kernel (filter_dsc) over skymap image (on)
         Args:
             filter_dsc:
-                Kernel description.
+                Kernel description. Note that theta_i should be given in astropy.units!
             on:
                 skymap image identifier.
         """
@@ -339,14 +339,14 @@ class SkyArray:
 
         map_name = [on]
         for filter_name, args in filter_dsc.items():
-            abbrev = args["abbrev"]
-            del args["abbrev"]
-            self.smoothing_length = args["theta_i"]
+            if rtn is False:
+                abbrev = args["abbrev"]
+                del args["abbrev"]
+                map_name.append(abbrev)
 
             clas = getattr(module, "Filters")
             fct = getattr(clas, filter_name)
-            _map = fct(_map, self._opening_angle, **args)
-            map_name.append(abbrev)
+            _map = fct(_map, self._opening_angle*un.deg, **args)
         if rtn:
             return _map
         else:

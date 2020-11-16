@@ -1,4 +1,4 @@
-import time
+import time, copy
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Type
 
@@ -18,20 +18,25 @@ from lenstools import ConvergenceMap
 
 from wys_ars.rays.utils import object_selection
 from wys_ars.simulation import Simulation
-from wys_ars.rays.skymap import SkyMap
+from wys_ars.rays.skys import SkyArray
 from wys_ars.rays.utils.filters import Filters
 from wys_ars.profiles import profile_2d as Profiles2D
 from wys_ars.io import IO
 
-default_dipole_vel_tx = {
-    "gaussian_high_pass": {"abbrev": "hpf", "theta_i": 5},
-    "gaussian_third_derivative_2": {"abbrev": "x3df", "theta_i": rad_pix, "direction": 1},
-    "apodization": {"abbrev": "apo", "theta_i": rad_pix*10},
+default_filter_dipole_identification = {
+    "gaussian_high_pass": {"abbrev": "hpf",},
+    "gaussian_third_derivative": {"abbrev": "3df", "direction": 1,},
+    "gaussian_low_pass": {"abbrev": "lpf",},
 }
-default_dipole_vel_ty = {
-    "gaussian_high_pass": {"abbrev": "hpf", "theta_i": 5},
-    "gaussian_third_derivative_2": {"abbrev": "y3df", "theta_i": rad_pix, "direction": 0},
-    "apodization": {"abbrev": "apo", "theta_i": rad_pix*10},
+default_filter_dipole_vel_tx = {
+    "gaussian_high_pass": {"theta_i": 5*un.arcmin},  #[arcmin]
+    "gaussian_third_derivative_2": {"theta_i": 1, "direction": 1},
+    "apodization": {"theta_i": None},
+}
+default_filter_dipole_vel_ty = {
+    "gaussian_high_pass": {"theta_i": 5*un.arcmin},  #[arcmin]
+    "gaussian_third_derivative_2": {"theta_i": 1, "direction": 0,},
+    "apodization": {"theta_i": None},
 }
 
 # store available nr. of cpus for parallel computation
@@ -46,29 +51,40 @@ class Dipoles:
     Class to find and analyse dipol signals.
 
     Attributes:
+        dipoles:
+            pd.DataFrame of all identified dipoles on the map.
 
     Methods:
+        from_file:
+        from_dataframe:
+        from_sky:
+        _filter:  <- remove this function
+        _get_convergence_thresholds:
+        _signal_to_noise_ratio:
+        _remove_peaks_crossing_edge:
+        _get_index_and_distance:
+        find_nearest:
+        find_nearest_in_box:
+        find_nearest_in_snap:
+        _get_index_and_distance:
+        get_transverse_velocities:
+        get_single_transverse_velocity_from_maps:
     """
 
     def __init__(
         self,
         dipoles: pd.DataFrame,
     ):
-        """
-        Read dipols data files.
-
-        Args:
-        """
         self.data = dipoles
 
     @classmethod
     def from_sky(
         cls,
-        skymap: Type[SkyMap],
+        skymap: Type[SkyArray],
         on: str,
         bin_dsc: dict,
-        kernel_width: float=5,
-        direction: int=1,
+        kernel_width: float = 5,
+        direction: int = 1,
         filters: bool = True,
     ) -> "Dipoles":
         """
@@ -117,53 +133,34 @@ class Dipoles:
         peak_df.attrs['map_file'] = skymap.map_file 
         peak_df.attrs['filters'] = filters
         peak_df.attrs['kernel_width'] = kernel_width
-        return cls(peak_df)
+        return cls.from_dataframe(peak_df)
 
     @classmethod
-    def from_file(
-        cls,
-        filename_dip: str,
-    ) -> "Dipoles":
-        """
-        Args:
-            kernel_width:
-                Smoothing kernel with [arcmin]
-        Returns:
-        """
+    def from_file(cls, filename_dip: str,) -> "Dipoles":
+        """ Create class from pd.DataFrame file """
         peak_df = pd.read_hdf(filename_dip, key="df")
-        return cls(peak_df)
+        return cls.from_dataframe(peak_df)
+    
+    @classmethod
+    def from_dataframe(cls, dip_df: pd.DataFrame,) -> "Dipoles":
+        """ Create class from pd.DataFrame file """
+        return cls(dip_df)
 
     @classmethod
     def _filter(
         cls,
-        skymap: Type[SkyMap],
+        skymap: Type[SkyArray],
         kernel_width: float,
-        direction: int,
-    ) -> Type[SkyMap]:
+        filter_dsc_x: dict = default_filter_dipole_identification,
+    ) -> Type[SkyArray]:
         """
         Prepre skymap for dipole detection.
         Note: This works only for skymap.data["orig"]
         """
+        # TODO: update to new code
         # prepare map for dipole detection
-        filter_dsc = {
-            "gaussian_high_pass": {
-                "abbrev": "ghpf",
-                "theta_i": kernel_width,
-            },
-            "gaussian_third_derivative": {
-                "abbrev": "g3df",
-                "theta_i": kernel_width,
-                "direction": direction,
-            }
-        }
-        _map = skymap.convolution(filter_dsc, on="orig", rtn=True)
-        filter_dsc = {
-            "gaussian_low_pass": {
-                "abbrev": "glpf",
-                "theta_i": kernel_width,
-            },
-        }
-        skymap.data["orig_ghpf_g3df_glpf"] = skymap.convolution(
+        _map = skymap.filter(filter_dsc, on="orig", rtn=True)
+        skymap.data["orig_hpf_3df_lpf"] = skymap.filter(
             filter_dsc, sky_array=np.abs(_map), rtn=True,
         )
         return skymap
@@ -320,59 +317,102 @@ class Dipoles:
                 distances[nan_idx] = -99999
         return list(distances), list(ids)
     
-    def transverse_velocities(
+    def get_transverse_velocities(
         self,
         deltaTmap: Type[SkyArray],
         kappamap: Type[SkyArray],
         halo_df: pd.DataFrame,
-        filter_dsc: dict,
+        extend: float,
+        ncpus: int = 1,
+        filter_dsc_x: dict = default_filter_dipole_vel_tx,
+        filter_dsc_y: dict = default_filter_dipole_vel_ty,
     ) -> None:
+        """
+        Calculate the transverse dipole/halo velocity through the temperature
+        perturbation map, by using the dipole signal of a moving potential.
 
-
-        _cl_tt = Parallel(
-            n_jobs=self._ncpus,
-            #verbose=verbosity_level,
-            #backend="threading",
-        )(delayed(integration)(dip) for idx, dip in self.data.iterrows())
-
-        def _rountine():
-            scale = 20
-            xlim = (dip_cen_pix[1]-rad_pix*scale, dip_cen_pix[1]+rad_pix*scale)
-            ylim = (dip_cen_pix[0]-rad_pix*scale, dip_cen_pix[0]+rad_pix*scale)
-
-            deltaTmap_zoom = SkyArray.from_array(
-                skyiswrs.data["orig"][xlim[0]:xlim[1], ylim[0]:ylim[1]],
-                opening_angle=2*30*rad_deg,
-                quantity="isw_rs",
-                dir_in=dir_map,
-            )
-            kappamap_zoom = SkyArray.from_array(
-                skykappa.data["orig"][xlim[0]:xlim[1], ylim[0]:ylim[1]],
-                opening_angle=2*30*rad_deg,
-                quantity="kappa_2",
-                dir_in=dir_map,
-            )
+        Args:
+            deltaTmap:
+                Unfiltered ISW-RS map [-].
+            kappamap:
+                Unfiltered convergence map [-].
+            halo_df:
+                pd.DataFrame of halos that have been associated with each dipole.
+            filter_dsc_x,y:
+                Dictionary of filters applied to cropped map in x,y-direction.
+            extend:
+                The size of the map from which the trans-vel is calculated in
+                units of R200 of the associated halo.
+        """
+        def integration(
+            dip: pd.Series,
+            halo_df: pd.DataFrame,
+            deltaTmap: Type[SkyArray],
+            kappamap: Type[SkyArray],
+            filter_dsc_x: dict,
+            filter_dsc_y: dict,
+            extend: float,
+        ) -> tuple:
+            # associate halo with dipole, if it failes, there must be more than
+            # one halo associated with one dipole
+            dipole_halo = halo_df[halo_df["id"] == dip.halo_id]
+            # get image which will be integrated to find dipole transverse vel.
+            rad_pix = dipole_halo["r200_pix"].values[0]
+            rad_deg = dipole_halo["r200_deg"].values[0]
+            cen_pix = (dip.x_pix, dip.y_pix)
+            deltaTmap_zoom = self.get_image(deltaTmap, cen_pix, rad_pix, rad_deg, extend)
+            kappamap_zoom = self.get_image(kappamap, cen_pix, rad_pix, rad_deg, extend)
             kappamap_zoom.convert_convergence_to_deflection(on="orig", rtn=False)
-
-            if filter_dsc is None:
-                filter_dsc_x = default_dipole_vel_tx
-                filter_dsc_y = default_dipole_vel_ty
-            deltaTmap_zoom.filter(filter_dsc_x, on="orig", rtn=False)
-            deltaTmap_zoom.data["x"] = skyiswrs_z.data.pop("orig_hpf_x3df_apo")
-            deltaTmap_zoom.filter(filter_dsc_y, on="orig", rtn=False)
-            deltaTmap_zoom.data["y"] = skyiswrs_z.data.pop("orig_hpf_y3df_apo")
-            kappamap_zoom.filter(filter_dsc, on="defltx", rtn=False)
-            kappamap_zoom.data["x"] = skykappa_z.data.pop("defltx_hpf_x3df_apo")
-            kappamap_zoom.filter(filter_dsc, on="deflty", rtn=False)
-            kappamap_zoom.data["y"] = skykappa_z.data.pop("deflty_hpf_x3df_apo")
-
-            x_vel, y_vel = self._get_transverse_velocity(
-                deltaTmap_zoom.data["x"], deltaTmap_zoom.data["y"],
-                kappamap_zoom.data["x"], kappamap_zoom.data["y"],
+            # filter images to remove CMB+Noise and enhance dipole signal
+            filter_dsc_x["gaussian_third_derivative_2"]["theta_i"] = rad_deg*un.deg
+            filter_dsc_y["gaussian_third_derivative_2"]["theta_i"] = rad_deg*un.deg
+            deltaTmap_zoom_x = deltaTmap_zoom.filter(filter_dsc_x, on="orig", rtn=True)
+            deltaTmap_zoom_y = deltaTmap_zoom.filter(filter_dsc_y, on="orig", rtn=True)
+            kappamap_zoom_x = kappamap_zoom.filter(filter_dsc_x, on="defltx", rtn=True)
+            kappamap_zoom_y = kappamap_zoom.filter(filter_dsc_y, on="deflty", rtn=True)
+            return self.get_single_transverse_velocity_from_maps(
+                deltaTmap_zoom_x, deltaTmap_zoom_y,
+                kappamap_zoom_x, kappamap_zoom_y,
             )
+       
+        if ncpus == 0:
+            self._ncpus = ncpus_available
+        else:
+            self._ncpus = ncpus
+        
+        _vt = Parallel(n_jobs=self._ncpus,)(
+            delayed(integration)(
+                dip,
+                halo_df,
+                deltaTmap,
+                kappamap,
+                filter_dsc_x,
+                filter_dsc_y,
+                extend,
+            ) for idx, dip in self.data.iterrows()
+        )
+        return _vt
 
     @staticmethod
-    def get_transverse_velocity(
+    def get_image(
+        img: Type[SkyArray], cen_pix: tuple, rad_pix: int, rad_deg: float, extend: float,
+    ) -> Type[SkyArray]:
+        xlim = np.array([
+            cen_pix[1]-rad_pix*extend, cen_pix[1]+rad_pix*extend,
+        ]).astype(int)
+        ylim = np.array([
+            cen_pix[0]-rad_pix*extend, cen_pix[0]+rad_pix*extend,
+        ]).astype(int)
+        img_zoom = SkyArray.from_array(
+            img.crop(xlim, ylim, of="orig", rtn=True),
+            opening_angle=2*extend*rad_deg,
+            quantity="isw_rs",
+            dir_in=None,
+        )
+        return img
+
+    @staticmethod
+    def get_single_transverse_velocity_from_maps(
         deltaTx: np.ndarray, deltaTy: np.ndarray, alphax: np.ndarray, alphay: np.ndarray,
     ) -> tuple:
         """
@@ -387,9 +427,9 @@ class Dipoles:
         Returns:
             x,y-components of the transverse velocity [km/sec]
         """
-        def _get_transverse_velocity_component(deltaT, alpha,) -> float:
+        def _transverse_velocity_component(deltaT, alpha,) -> float:
             return -c_light.to('km/s').value * np.sum(deltaT) / np.sum(alpha)
         
-        x_vel = _get_transverse_velocity_component(deltaTx, alphax)
-        y_vel = _get_transverse_velocity_component(deltaTy, alphay)
+        x_vel = _transverse_velocity_component(deltaTx, alphax)
+        y_vel = _transverse_velocity_component(deltaTy, alphay)
         return x_vel, y_vel

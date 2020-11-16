@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Union
+from typing import Union, Optional
 #from mpi4py import MPI
 
 from scipy import signal
@@ -120,27 +120,30 @@ class Filters:
         return cleaned_tiles.reshape(ntiles, npix, npix)
 
     def apodization(
-        img: np.ndarray, theta: float, theta_i: float,
+        img: np.ndarray, theta: float, theta_i: Optional[float] = None,
     ) -> np.ndarray:
         """
         Suppress image values beyond theta_i from the centre of the image.
         This avoids edge effects, due to sudden drops, which will become
         apparent in FFT procedues.
+        
         Args:
+            img: flat 2D SkyArray-image
+            theta: opening angle of image [deg]
+            theta_i: not used
+
         Returns:
         """
         npix = len(img)
-        if theta_i is None:
-            theta_i = npix / 30
         window = np.outer(
-            #signal.general_gaussian(npix, p=6, sig=theta_i),
-            #signal.general_gaussian(npix, p=6, sig=theta_i),
             signal.hann(npix), signal.hann(npix),
+            #signal.general_gaussian(npix, p=6, sig=theta_i),
+            #signal.general_gaussian(npix, p=6, sig=theta_i),
         )
         return img*window
 
     def gaussian(
-        img: np.ndarray, theta: float, theta_i: float,
+        img: np.ndarray, theta: un.quantity.Quantity, theta_i: un.quantity.Quantity,
     ) -> np.ndarray:
         """
         Gaussian low-pass filter
@@ -150,12 +153,14 @@ class Filters:
             theta: edge-lenght of field-of-view [deg]
             theta_i: smoothing kernel width [arcmin]
         """
-        img = ConvergenceMap(data=img, angle=theta*un.deg)
-        img = img.smooth(scale_angle=theta_i * un.arcmin, kind="gaussian",)
+        img = ConvergenceMap(data=img, angle=theta.to(un.deg).value)
+        img = img.smooth(scale_angle=theta_i.to(un.arcmin).value, kind="gaussian",)
         return img.data
 
     def gaussian_low_pass(
-        img: np.ndarray, theta: float, theta_i: float,
+        img: np.ndarray,
+        theta: un.quantity.Quantity,
+        theta_i: un.quantity.Quantity,
     ) -> np.ndarray:
         """
         Gaussian low-pass filter
@@ -166,14 +171,16 @@ class Filters:
             theta_i: smoothing kernel width [arcmin]
         """
         # Compute the smoothing scale in pixel units
-        theta_i_pixel = np.ceil(theta_i * (img.shape[0] / (theta*60))).astype('int')
+        theta_i_pix = np.ceil(
+            img.shape[0] * theta_i.to(un.deg).value / theta.to(un.deg).value
+        ).astype('int')
         lowpass = ndimage.gaussian_filter(
-            img, sigma=theta_i_pixel, order=0, output=np.float64, mode='nearest',
+            img, sigma=theta_i_pix, order=0, output=np.float64, mode='nearest',
         )
         return lowpass
     
     def gaussian_high_pass(
-        img: np.ndarray, theta: float, theta_i: float,
+        img: np.ndarray, theta: un.quantity.Quantity, theta_i: un.quantity.Quantity,
     ) -> np.ndarray:
         """
         Gaussian high-pass filter
@@ -188,7 +195,10 @@ class Filters:
         return highpass
 
     def gaussian_third_derivative_1(
-        img: np.ndarray, theta: float, theta_i: float, direction: Union[int,np.ndarray]=1,
+        img: np.ndarray,
+        theta: un.quantity.Quantity,
+        theta_i: un.quantity.Quantity,
+        direction: Union[int,np.ndarray]=1,
     ) -> np.ndarray:
         """
         Omni-directional third derivative gaussian kernel (also called DGD3 filter),
@@ -201,22 +211,29 @@ class Filters:
             theta: [deg]
             theta_i: [arcmin]
             sigma: ideally it should be the width of halo, R200. units are [pix]
+        
+        Returns:
         """
         # Compute the smoothing scale in pixel units
-        theta_i_pixel = np.ceil(theta_i * (img.shape[0] / (theta*60))).astype('int')
+        theta_i_pix = np.ceil(
+            img.shape[0] * theta_i.to(un.deg).value / theta.to(un.deg).value
+        ).astype('int')
         gauss_1 = ndimage.gaussian_filter(
-            img, sigma=theta_i_pixel*0.5, order=3*direction, output=np.float64, mode='nearest'
+            img, sigma=theta_i_pix*0.5, order=3*direction, output=np.float64, mode='nearest'
         )
         gauss_2 = ndimage.gaussian_filter(
-            img, sigma=theta_i_pixel*1.0, order=3*direction, output=np.float64, mode='nearest'
+            img, sigma=theta_i_pix*1.0, order=3*direction, output=np.float64, mode='nearest'
         )
         gauss_3 = ndimage.gaussian_filter(
-            img, sigma=theta_i_pixel*2.0, order=3*direction, output=np.float64, mode='nearest'
+            img, sigma=theta_i_pix*2.0, order=3*direction, output=np.float64, mode='nearest'
         )
         return gauss_1 - gauss_2 + gauss_3
     
     def gaussian_third_derivative_2(
-        img: np.ndarray, theta_fov: float, theta_i:float, direction: int,
+        img: np.ndarray,
+        theta: un.quantity.Quantity,
+        theta_i:un.quantity.Quantity,
+        direction: int,
     ) -> np.ndarray:
         """
         Omni-directional third derivative gaussian kernel (also called DGD3 filter),
@@ -226,37 +243,43 @@ class Filters:
 
         Args:
             img: partial sky-map
-            theta: [deg]
-            theta_i: [arcmin]
+            theta: [some angular distance]
+            theta_i: [some angular distance]
             sigma: ideally it should be the width of halo, R200. units are [pix]
         """
-        def _gauss_dist(theta: np.ndarray, sigma: float) -> np.ndarray:
+        def _gauss_dist(theta: np.ndarray, sigma: int) -> np.ndarray:
             return (np.exp(-theta**2 / (2*sigma**2)) / (2*np.pi*sigma**2))
 
         def _create_dgd3(
-            theta: np.ndarray, theta_fov: float, theta_i: float, axis: int,
+            dist: np.ndarray, theta_fov: float, theta_i: int, axis: int,
         ) -> np.ndarray:
             """ Filters Function """
             gauss = (
-                _gauss_dist(theta, theta_i*0.5) -\
-                _gauss_dist(theta, theta_i) +\
-                _gauss_dist(theta, theta_i*2.0)
+                _gauss_dist(dist, theta_i*0.5) -\
+                _gauss_dist(dist, theta_i) +\
+                _gauss_dist(dist, theta_i*2.0)
             )
-            d1_gauss = np.gradient(gauss, theta_fov/len(theta), axis=axis, edge_order=2)
-            d2_gauss = np.gradient(d1_gauss, theta_fov/len(theta), axis=axis, edge_order=2)
-            d3_gauss = np.gradient(d2_gauss, theta_fov/len(theta), axis=axis, edge_order=2)
+            d1_gauss = np.gradient(gauss, theta_fov/len(dist), axis=axis, edge_order=2)
+            d2_gauss = np.gradient(d1_gauss, theta_fov/len(dist), axis=axis, edge_order=2)
+            d3_gauss = np.gradient(d2_gauss, theta_fov/len(dist), axis=axis, edge_order=2)
             return d3_gauss
 
-        npix = img.shape[0]
-        x1edge = np.linspace(1, npix, npix) - npix/2 - 0.5
+        _npix = len(img)
+        x1edge = np.linspace(1, _npix, _npix) - _npix/2 - 0.5
         x, y = np.meshgrid(x1edge, x1edge)
         dist = np.sqrt(x**2 + y**2)
-        pw = theta_fov / img.shape[0]
-        window = _create_dgd3(dist, pw*len(dist), theta_i, direction)
+        theta_fov_deg = theta.to(un.deg).value * len(dist) / _npix
+        theta_i_pix = np.ceil(
+            _npix * theta_i.to(un.deg).value / theta.to(un.deg).value
+        ).astype('int')
+        window = _create_dgd3(dist, theta_fov_deg, theta_i_pix, direction)
         return np.multiply(window, img)
 
     def gaussian_compensated(
-        img: np.ndarray, theta: float, theta_i:float, theta_o: float,
+        img: np.ndarray,
+        theta: un.quantity.Quantity,
+        theta_i: un.quantity.Quantity,
+        theta_o: un.quantity.Quantity,
     ) -> np.ndarray:
         """
         Compensted gaussian filter as define in arxiv:1907.06657 (Eq. 16)
@@ -277,10 +300,10 @@ class Filters:
             return gt
 
         # pixel width in degrees
-        pw = theta / img.shape[0]
+        pw = theta.to(un.deg).value / img.shape[0]
         # convert filter specifications from arcmin to pixel-width units
-        theta_i = (theta_i / 60. ) / pw
-        theta_o = (theta_o / 60. ) / pw
+        theta_i = theta_i.to(un.deg).value / pw
+        theta_o = theta_o.to(un.deg).value / pw
         theta_o_int = np.ceil(theta_o).astype('int') #round up theta_o to be safe
         # define grid to map the filter onto, which we will use for the convolution
         a = b = 0

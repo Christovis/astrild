@@ -57,6 +57,8 @@ class LinearAngularPowerSpectrum:
         self.lps = lps
         if ncpus == 0:
             self._ncpus = ncpus_available
+        else:
+            self._ncpus = ncpus
         self._C_tt_outdated = True
 
     @classmethod
@@ -186,11 +188,9 @@ class LinearAngularPowerSpectrum:
             )[0]
 
         print(f"just about to start with {self._ncpus}")
-        _cl_tt = Parallel(
-            n_jobs=self._ncpus,
-            #verbose=verbosity_level,
-            #backend="threading",
-        )(delayed(integration)(ell) for ell in self._ell_range)
+        _cl_tt = Parallel(n_jobs=self._ncpus,)(
+            delayed(integration)(ell) for ell in self._ell_range
+        )
 
         self._C_tt = np.array(_cl_tt) * 4/const.c.to(un.km/un.second).value**5
         self._C_tt_outdated = False
