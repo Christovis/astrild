@@ -162,13 +162,15 @@ class SkyArray:
     @property
     def opening_angle(self) -> float:
         return self._opening_angle
-    
+
+
     def pdf(self, nbins: int, of: str="orig") -> dict:
         _pdf = {}
         _pdf["values"], _pdf["bins"] = np.histogram(
             self.data[of], bins=nbins, density=True,
         )
         return _pdf
+
 
     def wl_peak_counts(
         self,
@@ -201,6 +203,7 @@ class SkyArray:
         peak_counts_df = pd.DataFrame(data=peak_counts_dic)
         return peak_counts_df
 
+
     def resize(
         self,
         npix,
@@ -215,6 +218,7 @@ class SkyArray:
             return img
         else:
             self.data[of] = img
+
 
     def crop(
         self,
@@ -253,6 +257,7 @@ class SkyArray:
             )
             self._npix = zoom.shape[0]
 
+
     def division(
         self,
         ntiles: int,
@@ -286,6 +291,7 @@ class SkyArray:
         else:
             self.tiles = tiles
 
+
     def merge(
         self,
         tiles: np.ndarray,
@@ -312,6 +318,7 @@ class SkyArray:
         img = np.vstack((row_tiles))
         if rtn:
             return img
+
 
     def filter(
         self,
@@ -352,6 +359,7 @@ class SkyArray:
         else:
             self.data[("_").join(map_name)] = _map
 
+
     def create_galaxy_shape_noise(
         self, std: float, ngal: float, rnd_seed: Optional[int] = None,
     ) -> None:
@@ -383,6 +391,7 @@ class SkyArray:
             )
         print(f"The GSN map sigma is {np.std(self.data['gsn'])}", std_pix)
 
+    
     def add_galaxy_shape_noise(self, on: str = "orig") -> np.ndarray:
         """
         Add GSN on top of skymap.
@@ -401,6 +410,7 @@ class SkyArray:
         else:
             raise SkyArrayWarning(f"GSN should not be added to {self.quantity}")
 
+    
     def create_cmb(
         self,
         filepath_cl: str,
@@ -441,6 +451,7 @@ class SkyArray:
         else:
             self.data["cmb"] = cmb
 
+    
     def add_cmb(
         self,
         filepath_cl: str,
@@ -467,6 +478,7 @@ class SkyArray:
         else:
             raise SkyArrayWarning(f"CMB should not be added to {self.quantity}")
     
+    
     def convert_convergence_to_deflection(
         self,
         on: Optional[str] = None,
@@ -492,11 +504,46 @@ class SkyArray:
             _map = copy.deepcopy(self.data[on])
         else:
             _map = copy.deepcopy(sky_array)
-        alpha_1, alpha_2 = SkyUtils.convert_convergence_to_deflection(
+        alpha_1, alpha_2 = SkyUtils.convert_convergence_to_deflection_cython(
             _map, self._npix, self._opening_angle*un.deg,
         )
         if rtn:
-            return alpha_1, alpha_2
+            return alpha_2, alpha_1
         else:
             self.data["defltx"] = alpha_2
             self.data["deflty"] = alpha_1
+    
+
+    def convert_deflection_to_shear(
+        self,
+        on: Optional[str] = None,
+        sky_array: Optional[np.ndarray] = None,
+        rtn: bool = False,
+) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Args:
+            on:
+                String to indicate which map in self.data should be used.
+            sky_array:
+                2D convergence map.
+            rtn:
+                Bool to indicate whether to attach result to class object or return.
+
+        Returns:
+            gamma_1,2: 2D shear map [-]
+        """
+        assert self.quantity in ["alpha"], (
+            "Shear can only be calculated from the deflection angle map"
+        )
+        if sky_array is None:
+            _map = copy.deepcopy(self.data[on])
+        else:
+            _map = copy.deepcopy(sky_array)
+        gamma_1, gamma_2 = SkyUtils.convert_deflection_to_shear(
+            _map, self._npix, self._opening_angle*un.deg,
+        )
+        if rtn:
+            return gamma_2, gamma_1
+        else:
+            self.data["gammax"] = gamma_2
+            self.data["gammay"] = gamma_1

@@ -153,11 +153,16 @@ class LinearAngularPowerSpectrum:
     
     @ncpus.setter
     def ncpus(self, val: int):
-        if ncpus == 0:
+        if (ncpus == 0) or (ncpus < -1):
+            raise ValueError(
+                f"ncpus={ncpus} is not valid. Please enter a value " +\
+                ">0 for ncpus or -1 to use all available cores."
+            )
+        elif ncpus == -1:
             self._ncpus = ncpus_available
         else:
             self._ncpus = val
-    
+        
     @property
     def Cl(self):
         if self._C_tt_outdated:

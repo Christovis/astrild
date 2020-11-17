@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+import numba as nb
 
 from astropy import units as un
 from astropy.constants import c as c_light
@@ -24,8 +25,89 @@ class SkyUtils:
         elif quantity in ["isw_rs"]:
             map_df.loc[:, [quantity]] /= c_light.to('km/s').value**3
         return map_df
+    
+    def convert_deflection_to_shear(
+        alpha1: np.ndarray,
+        alpha2: np.ndarray,
+        npix: int,
+        opening_angle: float,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Args:
+            alpha1,2:
+            opening_angle:
+                Edge length of field-of-view [angular distance]
+            npix:
+                Number of pixels along edge of field-of-view
 
-    def convert_convergence_to_deflection(
+        Returns:
+            gamma1,2: shear map
+        """
+        #TODO
+        al11 = 1 - np.gradient(alpha1, coord, axis=0)
+        al12 = - np.gradient(alpha1, coord, axis=1)
+        al21 = - np.gradient(alpha2, coord, axis=0)
+        al22 = 1 - np.gradient(alpha2, coord, axis=1)
+        shear1 = 0.5*(al11 - al22)
+        shear2 = 0.5*(al21 + al12)
+        return shear1, shear2
+
+    @nb.jit(nopython=True)
+    def convert_convergence_to_deflection_numba(
+        kappa: np.ndarray,
+        npix: int,
+        opening_angle: float,
+        padding_factor: int = 4,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Args:
+            kappa:
+                Convergence map
+            opening_angle:
+                Edge length of field-of-view [angular distance]
+            npix:
+                Number of pixels along edge of field-of-view
+
+        Returns:
+            alpha1,2:
+                deflection angle in units of opening_angle
+        """
+        xlen, ylen = kappa.shape
+        xpad, ypad = xlen*padFac, ylen*padFac
+        # Array of 2D dimensionless coordinates
+        xsgrid, ysgrid = _make_r_coor(opening_angle, xlen)
+        x = np.zeros((xlen, xlen, 2))
+        x[:,:,0] = xsgrid
+        x[:,:,1] = ysgrid
+        Lx = x[-1,0,0] - x[0,0,0]
+        Ly = x[0,-1,1] - x[0,0,1]
+        # round to power of 2 to speed up FFT
+        xpad = np.int(2**(np.ceil(np.log2(xpad))))
+        ypad = np.int(2**(np.ceil(np.log2(ypad))))
+        kappa_ft = np.fft.fft2(kappa, s=[xpad,ypad])
+        Lxpad = Lx * xpad/xlen
+        Lypad = Ly * ypad/ylen
+        # make a k-space grid
+        kxgrid, kygrid = np.meshgrid(
+            np.fft.fftfreq(xpad), np.fft.fftfreq(ypad), indexing='ij',
+        )
+        kxgrid *= 2*np.pi*xpad/Lxpad
+        kygrid *= 2*np.pi*ypad/Lypad
+        alphaX_kfac = 2j * kxgrid / (kxgrid**2 + kygrid**2)  
+        alphaY_kfac = 2j * kygrid / (kxgrid**2 + kygrid**2)
+        # [0,0] component mucked up by dividing by k^2
+        alphaX_kfac[0,0], alphaY_kfac[0,0] = 0,0
+        alphaX_ft = alphaX_kfac * kappa_ft
+        alphaY_ft = alphaY_kfac * kappa_ft
+        alphaX = np.fft.ifft2(alphaX_ft)[:xlen,:ylen]
+        alphaY = np.fft.ifft2(alphaY_ft)[:xlen,:ylen] 
+        alpha = np.zeros(x.shape)
+        alpha[:,:,0] = alphaX
+        alpha[:,:,1] = alphaY
+        return -alpha # worry aboutminus sign? Seems to make it work :-)
+
+
+    def convert_convergence_to_deflection_cython(
         kappa: np.ndarray,
         npix: int,
         opening_angle: float,
@@ -35,7 +117,7 @@ class SkyUtils:
             kappa:
                 Convergence map
             opening_angle:
-                Edge length of field-of-view [any unit convertable to radiant]
+                Edge length of field-of-view [angular distance]
             npix:
                 Number of pixels along edge of field-of-view
 

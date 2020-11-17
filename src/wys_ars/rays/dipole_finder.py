@@ -1,6 +1,6 @@
 import time, copy
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import pandas as pd
 import xarray as xr
@@ -24,18 +24,18 @@ from wys_ars.profiles import profile_2d as Profiles2D
 from wys_ars.io import IO
 
 default_filter_dipole_identification = {
-    "gaussian_high_pass": {"abbrev": "hpf",},
+    "gaussian_high_pass": {"abbrev": "hpf", "theta_i": 1,},
     "gaussian_third_derivative": {"abbrev": "3df", "direction": 1,},
-    "gaussian_low_pass": {"abbrev": "lpf",},
+    "gaussian_low_pass": {"abbrev": "lpf", "theta_i": 1,},
 }
 default_filter_dipole_vel_tx = {
     "gaussian_high_pass": {"theta_i": 5*un.arcmin},  #[arcmin]
-    "gaussian_third_derivative_2": {"theta_i": 1, "direction": 1},
+    "gaussian_first_derivative": {"theta_i": 1, "direction": 1},
     "apodization": {"theta_i": None},
 }
 default_filter_dipole_vel_ty = {
     "gaussian_high_pass": {"theta_i": 5*un.arcmin},  #[arcmin]
-    "gaussian_third_derivative_2": {"theta_i": 1, "direction": 0,},
+    "gaussian_first_derivative": {"theta_i": 1, "direction": 0,},
     "apodization": {"theta_i": None},
 }
 
@@ -43,6 +43,7 @@ default_filter_dipole_vel_ty = {
 ncpus_available = multiprocessing.cpu_count()
 
 class DipolesWarning(BaseException):
+    """Base class for other exceptions"""
     pass
 
 
@@ -235,15 +236,14 @@ class Dipoles:
         )
         return sigma, pos
 
-
+    
     def find_nearest(
-        self, df2: pd.DataFrame, columns: dict,
+        self, df2: pd.DataFrame, column_labels: dict, column_add: Optional[list] = None,
     ) -> None:
         """
-        Method used to e.g. find haloes which cause a dipole.
-
         Args:
-            df2:
+            df2: DataFrame of object that should be associated with dipoles.
+            columns: Identify columns in df2 that should be attached to self.data
         """
         if "box_nr" in self.data.columns.values:
             distances, ids = self.find_nearest_in_box(self.data, df2)
@@ -252,8 +252,19 @@ class Dipoles:
         else:
             # find corresponding group-halo to dipole signal
             distances, ids = self._get_index_and_distance(self.data, df2)
-        self.data[columns["id"]] = ids
-        self.data[columns["dist"]] = distances
+        self.data[column_labels["id"]] = ids
+        self.data[column_labels["dist"]] = distances
+        
+        print("Done")
+        if column_add is not None:
+            print("Add")
+            for key in column_add:
+                assert key not in self.data.columns.values
+                print(f"Add {key}")
+                self.data[key] = [
+                    df2[df2["id"] == i][key].values[0] if i != -99999
+                    else -99999 for i in ids
+                ]
 
 
     def find_nearest_in_box(
@@ -292,9 +303,14 @@ class Dipoles:
             ids += _indices
         return distances, ids
 
+
     def _get_index_and_distance(
         self, df1: pd.DataFrame, df2: pd.DataFrame,
     ) -> tuple:
+        """
+        Args:
+        Returns:
+        """
         if len(df2.index.values) == 0:
             print("There are no Halos in this distance")
             distances = np.ones(len(df1.index.values)) * -99999
@@ -307,7 +323,7 @@ class Dipoles:
             distances, indices = nbrs.kneighbors(df1[["x_deg", "y_deg"]].values)
             distances = distances.T[0]
             ids = df2["id"].values[indices.T[0]].astype(int)
-            if len(ids) > len(np.unique(ids)):
+            if len(ids) > len(np.unique(ids)):  # handle dublications
                 nan_idx = []
                 for u_id in np.unique(ids):
                     _idx = np.where(ids == u_id)[0]
@@ -316,12 +332,25 @@ class Dipoles:
                 ids[nan_idx] = -99999
                 distances[nan_idx] = -99999
         return list(distances), list(ids)
-    
+
+
+    def _get_cpu_nr(self, ncpus: int) -> None:
+        """ Setting the nr. of cpus to use """
+        if (ncpus == 0) or (ncpus < -1):
+            raise ValueError(
+                f"ncpus={ncpus} is not valid. Please enter a value " +\
+                ">0 for ncpus or -1 to use all available cores."
+            )
+        elif ncpus == -1:
+            self._ncpus = ncpus_available
+        else:
+            self._ncpus = ncpus
+
+
     def get_transverse_velocities(
         self,
         deltaTmap: Type[SkyArray],
         kappamap: Type[SkyArray],
-        halo_df: pd.DataFrame,
         extend: float,
         ncpus: int = 1,
         filter_dsc_x: dict = default_filter_dipole_vel_tx,
@@ -336,36 +365,24 @@ class Dipoles:
                 Unfiltered ISW-RS map [-].
             kappamap:
                 Unfiltered convergence map [-].
-            halo_df:
-                pd.DataFrame of halos that have been associated with each dipole.
             filter_dsc_x,y:
                 Dictionary of filters applied to cropped map in x,y-direction.
             extend:
                 The size of the map from which the trans-vel is calculated in
                 units of R200 of the associated halo.
         """
-        def integration(
-            dip: pd.Series,
-            halo_df: pd.DataFrame,
-            deltaTmap: Type[SkyArray],
-            kappamap: Type[SkyArray],
-            filter_dsc_x: dict,
-            filter_dsc_y: dict,
-            extend: float,
-        ) -> tuple:
-            # associate halo with dipole, if it failes, there must be more than
-            # one halo associated with one dipole
-            dipole_halo = halo_df[halo_df["id"] == dip.halo_id]
+        def integration(dip: pd.Series,) -> tuple:
             # get image which will be integrated to find dipole transverse vel.
-            rad_pix = dipole_halo["r200_pix"].values[0]
-            rad_deg = dipole_halo["r200_deg"].values[0]
-            cen_pix = (dip.x_pix, dip.y_pix)
-            deltaTmap_zoom = self.get_image(deltaTmap, cen_pix, rad_pix, rad_deg, extend)
-            kappamap_zoom = self.get_image(kappamap, cen_pix, rad_pix, rad_deg, extend)
+            deltaTmap_zoom = self.get_image(
+                deltaTmap, (dip.x_pix, dip.y_pix), dip.r200_pix*extend, dip.r200_deg*extend,
+            )
+            kappamap_zoom = self.get_image(
+                kappamap, (dip.x_pix, dip.y_pix), dip.r200_pix*extend, dip.r200_deg*extend,
+            )
             kappamap_zoom.convert_convergence_to_deflection(on="orig", rtn=False)
             # filter images to remove CMB+Noise and enhance dipole signal
-            filter_dsc_x["gaussian_third_derivative_2"]["theta_i"] = rad_deg*un.deg
-            filter_dsc_y["gaussian_third_derivative_2"]["theta_i"] = rad_deg*un.deg
+            filter_dsc_x["gaussian_first_derivative"]["theta_i"] = 2*dip.r200_deg*un.deg
+            filter_dsc_y["gaussian_first_derivative"]["theta_i"] = 2*dip.r200_deg*un.deg
             deltaTmap_zoom_x = deltaTmap_zoom.filter(filter_dsc_x, on="orig", rtn=True)
             deltaTmap_zoom_y = deltaTmap_zoom.filter(filter_dsc_y, on="orig", rtn=True)
             kappamap_zoom_x = kappamap_zoom.filter(filter_dsc_x, on="defltx", rtn=True)
@@ -375,41 +392,57 @@ class Dipoles:
                 kappamap_zoom_x, kappamap_zoom_y,
             )
        
-        if ncpus == 0:
-            self._ncpus = ncpus_available
-        else:
-            self._ncpus = ncpus
+        if "x_vel" not in self.data.columns.values:
+            self.data["x_vel"] = [-99999] * len(self.data.index)
+            self.data["y_vel"] = [-99999] * len(self.data.index)
         
-        _vt = Parallel(n_jobs=self._ncpus,)(
-            delayed(integration)(
-                dip,
-                halo_df,
-                deltaTmap,
-                kappamap,
-                filter_dsc_x,
-                filter_dsc_y,
-                extend,
-            ) for idx, dip in self.data.iterrows()
-        )
-        return _vt
+        self._get_cpu_nr(ncpus)
+        print(f"Calculate the trans. vel. of {len(self.data.index)} with {self._ncpus} cpus")
+        if self._ncpus == 1:
+            _vt = []
+            for idx, dip in self.data.iterrows():
+                _vt.append(integration(dip))
+        else:
+            _vt = Parallel(n_jobs=self._ncpus,)(
+                delayed(integration)(dip)
+                for idx, dip in self.data.iterrows()
+            )
+        _vt = np.asarray(_vt).T
+        print("Done------!!!!!!!!!!!!!__________")
+        print(len(self.data.index), len(_vt), _vt.shape)
+        self.data["x_vel"] = _vt[0]
+        self.data["y_vel"] = _vt[1]
+
+
+    def _trim_edges(
+        self, dipoles: pd.DataFrame, extend: float, npix: int,
+    ) -> None:
+        """
+        Remove dipoles whose radii crosses the simulaiton boundary.
+
+        Args:
+            npix: Nr. of pixels on edge of SkyMap
+        """
+        return object_selection.trim_dataframe_of_objects_crossing_edge(voids, radii_max, npix)
+
 
     @staticmethod
     def get_image(
-        img: Type[SkyArray], cen_pix: tuple, rad_pix: int, rad_deg: float, extend: float,
+        img: Type[SkyArray], cen_pix: tuple, extend_pix: int, extend_deg: float,
     ) -> Type[SkyArray]:
         xlim = np.array([
-            cen_pix[1]-rad_pix*extend, cen_pix[1]+rad_pix*extend,
+            cen_pix[1]-extend_pix, cen_pix[1]+extend_pix,
         ]).astype(int)
         ylim = np.array([
-            cen_pix[0]-rad_pix*extend, cen_pix[0]+rad_pix*extend,
+            cen_pix[0]-extend_pix, cen_pix[0]+extend_pix,
         ]).astype(int)
         img_zoom = SkyArray.from_array(
             img.crop(xlim, ylim, of="orig", rtn=True),
-            opening_angle=2*extend*rad_deg,
-            quantity="isw_rs",
-            dir_in=None,
+            opening_angle=2*extend_deg,
+            quantity=None, dir_in=None,
         )
         return img
+
 
     @staticmethod
     def get_single_transverse_velocity_from_maps(

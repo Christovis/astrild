@@ -77,7 +77,7 @@ def minimal_voids(voids, tracers, args):
     return voids
 
 
-def trim_edges(data, extend: float, npix: int) -> dict:
+def trim_dataframe_of_objects_crossing_edge(data, extend: float, npix: int) -> dict:
     """
     Remove edge effects.
 
@@ -90,6 +90,28 @@ def trim_edges(data, extend: float, npix: int) -> dict:
         object: dict
             radius, centers in x and y (degrees or pixel numbers available)
     """
+    bool_3_i_x = data["x_pix"].values + extend * data["rad_pix"].values < npix
+    bool_3_ii_x = data["x_pix"].values - extend * data["rad_pix"].values > 0
+    bool_3_i_y = data["y_pix"].values + extend * data["rad_pix"].values < npix
+    bool_3_ii_y = data["y_pix"].values - extend * data["rad_pix"].values > 0
+    indx_b = np.logical_and(
+        np.logical_and(bool_3_i_x, bool_3_ii_x),
+        np.logical_and(bool_3_i_y, bool_3_ii_y),
+    )
+    return data[indx_b]
+
+def trim_dataframe_of_objects_crossing_edge(data, extend: float, npix: int) -> dict:
+    """
+    """
+    bool_3_i_x = data["x_pix"].values + extend * data["rad_pix"].values < npix
+    bool_3_ii_x = data["x_pix"].values - extend * data["rad_pix"].values > 0
+    bool_3_i_y = data["y_pix"].values + extend * data["rad_pix"].values < npix
+    bool_3_ii_y = data["y_pix"].values - extend * data["rad_pix"].values > 0
+    indx_b = np.logical_and(
+        np.logical_and(bool_3_i_x, bool_3_ii_x),
+        np.logical_and(bool_3_i_y, bool_3_ii_y),
+    )
+    return indx_b
     # remove voids outside of 1 * max void radius
     # max_void_radius = np.max(void_radius)
     # trim_length = 1 * max_void_radius
@@ -101,7 +123,7 @@ def trim_edges(data, extend: float, npix: int) -> dict:
     #    np.logical_and(bool_1_x,bool_2_x),
     #    np.logical_and(bool_1_y,bool_2_y),
     # )
-
+    
     # remove voids within kpe of their own radii from the edge
     # bool_3_i_x = objects["POS"]["pix"][:, 0] + \
     #             args.extend * objects["RAD"]["pix"] < args.Npix
@@ -111,19 +133,9 @@ def trim_edges(data, extend: float, npix: int) -> dict:
     #             args.extend * objects["RAD"]["pix"] < args.Npix
     # bool_3_ii_y = objects["POS"]["pix"][:, 1] - \
     #              args.extend * objects["RAD"]["pix"] > 0
-    bool_3_i_x = data["x_pix"].values + extend * data["rad_pix"].values < npix
-    bool_3_ii_x = data["x_pix"].values - extend * data["rad_pix"].values > 0
-    bool_3_i_y = data["y_pix"].values + extend * data["rad_pix"].values < npix
-    bool_3_ii_y = data["y_pix"].values - extend * data["rad_pix"].values > 0
-
-    indx_b = np.logical_and(
-        np.logical_and(bool_3_i_x, bool_3_ii_x), np.logical_and(bool_3_i_y, bool_3_ii_y)
-    )
+    
     # trim = np.logical_and(trim_a,trim_b)
-
     # iterate over nested dictionary and index for all keys
     # for major_key in objects.keys():
     #    for minor_key in objects[major_key].keys():
     #        objects[major_key][minor_key] = objects[major_key][minor_key][indx_b]
-
-    return data[indx_b]

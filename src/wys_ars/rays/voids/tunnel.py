@@ -31,10 +31,10 @@ class TunnelsFinder:
         skymap:
             SkyMap object
     Methods:
-        find_peaks:
-            Identify traces which are used to find voids.
-        find_voids:
-            Identify voids.
+        find_peaks: Identify traces which are used to find voids.
+        _get_convergence_thresholds:
+        _signal_to_noise_ratio:
+        find_voids: Identify voids.
     """
 
     def __init__(self, skymap: Type[SkyMap]):

@@ -1,7 +1,8 @@
+import time
+
 import pandas as pd
 import numpy as np
 from typing import Union, Optional
-#from mpi4py import MPI
 
 from scipy import signal
 from scipy import ndimage
@@ -13,9 +14,6 @@ from sklearn.feature_extraction.image import reconstruct_from_patches_2d
 from astropy import units as un
 from lenstools import ConvergenceMap
 
-#mpi_comm = MPI.COMM_WORLD
-#mpi_rank = mpi_comm.Get_rank()
-#mpi_size = mpi_comm.Get_size()
 
 class Filters:
     """
@@ -52,7 +50,6 @@ class Filters:
         patch_npix = int(clean_data.shape[0] / ntiles)
         data = extract_patches_2d(clean_data, (patch_npix, patch_npix))
         dt = time() - t0
-        print('Divided %.2fs.' % dt, data.shape)
         data = data.reshape(data.shape[0], -1)
         data -= np.mean(data, axis=0)
         data /= np.std(data, axis=0)
@@ -68,7 +65,6 @@ class Filters:
             #positive_code=True,
         ).fit(data)
         dt = time() - t0
-        print('Fitted in %.2fs.' % dt)
         components = dico.components_
         # extract reference patches from noisy data
         data = extract_patches_2d(noisy_data, (patch_npix, patch_npix))
@@ -86,7 +82,6 @@ class Filters:
         patches = patches.reshape(len(data), *(patch_npix, patch_npix))
         cleaned_img = reconstruct_from_patches_2d(patches, (npix, npix))
         dt = time() - t0
-        print('Totally finished in %.2fs.' % dt)
         return cleaned_img
 
     def pca(
@@ -143,42 +138,32 @@ class Filters:
         return img*window
 
     def gaussian(
-        img: np.ndarray, theta: un.quantity.Quantity, theta_i: un.quantity.Quantity,
-    ) -> np.ndarray:
-        """
-        Gaussian low-pass filter
-
-        Args:
-            img: partial sky-map
-            theta: edge-lenght of field-of-view [deg]
-            theta_i: smoothing kernel width [arcmin]
-        """
-        img = ConvergenceMap(data=img, angle=theta.to(un.deg).value)
-        img = img.smooth(scale_angle=theta_i.to(un.arcmin).value, kind="gaussian",)
-        return img.data
-
-    def gaussian_low_pass(
         img: np.ndarray,
         theta: un.quantity.Quantity,
         theta_i: un.quantity.Quantity,
+        **kwargs,
     ) -> np.ndarray:
         """
-        Gaussian low-pass filter
-        
+        Gaussian filter for low-pass filter to get rid of long-wavelenths
+        (e.g. CMB when interested in ISW-RS signals).
+        Note: It is based on lenstools.ConvergenceMap.smooth function,
+            but it has nothing in particular todo with convergence maps,
+            and can be used for any other map, e.g. isw_rs.
+
         Args:
             img: partial sky-map
             theta: edge-lenght of field-of-view [deg]
             theta_i: smoothing kernel width [arcmin]
         """
-        # Compute the smoothing scale in pixel units
-        theta_i_pix = np.ceil(
-            img.shape[0] * theta_i.to(un.deg).value / theta.to(un.deg).value
-        ).astype('int')
-        lowpass = ndimage.gaussian_filter(
-            img, sigma=theta_i_pix, order=0, output=np.float64, mode='nearest',
-        )
-        return lowpass
-    
+        img = ConvergenceMap(data=img, angle=theta.to(un.deg))
+        if len(img.data) < 500:
+            # for image with less than 500^2 images real-space is faster
+            img = img.smooth(scale_angle=theta_i.to(un.arcmin), kind="gaussian", **kwargs)
+        else:
+            # for larger images FFT is optimal
+            img = img.smooth(scale_angle=theta_i.to(un.arcmin), kind="gaussianFFT", **kwargs)
+        return img.data
+
     def gaussian_high_pass(
         img: np.ndarray, theta: un.quantity.Quantity, theta_i: un.quantity.Quantity,
     ) -> np.ndarray:
@@ -190,7 +175,7 @@ class Filters:
             theta: edge-lenght of field-of-view [deg]
             theta_i: smoothing kernel width [arcmin]
         """
-        lowpass = Filters.gaussian_low_pass(img, theta, theta_i)
+        lowpass = Filters.gaussian(img, theta, theta_i)
         highpass = img - lowpass
         return highpass
 
@@ -256,13 +241,57 @@ class Filters:
             """ Filters Function """
             gauss = (
                 _gauss_dist(dist, theta_i*0.5) -\
-                _gauss_dist(dist, theta_i) +\
-                _gauss_dist(dist, theta_i*2.0)
+                _gauss_dist(dist, theta_i)*0.75 +\
+                _gauss_dist(dist, theta_i*2.0)*0.5
             )
             d1_gauss = np.gradient(gauss, theta_fov/len(dist), axis=axis, edge_order=2)
             d2_gauss = np.gradient(d1_gauss, theta_fov/len(dist), axis=axis, edge_order=2)
             d3_gauss = np.gradient(d2_gauss, theta_fov/len(dist), axis=axis, edge_order=2)
             return d3_gauss
+
+        _npix = len(img)
+        x1edge = np.linspace(1, _npix, _npix) - _npix/2 - 0.5
+        x, y = np.meshgrid(x1edge, x1edge)
+        dist = np.sqrt(x**2 + y**2)
+        theta_fov_deg = theta.to(un.deg).value * len(dist) / _npix
+        theta_i_pix = np.ceil(
+            _npix * theta_i.to(un.deg).value / theta.to(un.deg).value
+        ).astype('int')
+        window = abs(_create_dgd3(dist, theta_fov_deg, theta_i_pix, direction))
+        return np.multiply(window, img)
+    
+    def gaussian_first_derivative(
+        img: np.ndarray,
+        theta: un.quantity.Quantity,
+        theta_i:un.quantity.Quantity,
+        direction: int,
+    ) -> np.ndarray:
+        """
+        Omni-directional third derivative gaussian kernel (also called DGD3 filter),
+        useful for extracting dipole signal, based on
+        DOI: 10.3847/2041-8213/ab0bfe
+        arXiv: 1812.04241
+
+        Args:
+            img: partial sky-map
+            theta: [some angular distance]
+            theta_i: [some angular distance]
+            sigma: ideally it should be the width of halo, R200. units are [pix]
+        """
+        def _gauss_dist(theta: np.ndarray, sigma: int) -> np.ndarray:
+            return (np.exp(-theta**2 / (2*sigma**2)) / (2*np.pi*sigma**2))
+
+        def _create_dgd3(
+            dist: np.ndarray, theta_fov: float, theta_i: int, axis: int,
+        ) -> np.ndarray:
+            """ Filters Function """
+            d1_gauss = np.gradient(
+                _gauss_dist(dist, theta_i*0.5),
+                theta_fov/len(dist),
+                axis=axis,
+                edge_order=2,
+            )
+            return d1_gauss
 
         _npix = len(img)
         x1edge = np.linspace(1, _npix, _npix) - _npix/2 - 0.5

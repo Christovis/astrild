@@ -391,13 +391,15 @@ class Voids:
         self, voids: pd.DataFrame, radii_max: float, npix: int
     ) -> None:
         """
-        Remove voids whose radii goes over the simulation boundary.
+        Remove voids whose radii crosses the simulation boundary.
 
         Args:
-            radii_max: npix:
-                Nr. of pixels on edge of SkyMap
+            radii_max:
+            npix: Nr. of pixels on edge of SkyMap
         """
-        return object_selection.trim_edges(voids, radii_max, npix)
+        return object_selection.trim_dataframe_of_objects_crossing_edge(
+            voids, radii_max, npix,
+        )
 
     def filter_snapshot(self, ray_nr: int) -> None:
         """ """
