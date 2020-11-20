@@ -10,12 +10,13 @@ from astropy.io import fits
 from astropy import units as un
 from lenstools import ConvergenceMap
 
-#from wys_ars.rays import peak as Peaks
+# from wys_ars.rays import peak as Peaks
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.rays.voids.tunnels import halo
 from wys_ars.rays.voids.tunnels import textFile
 
 this_file_path = Path(__file__).parent.absolute()
+
 
 class WatershedFinderWarning(BaseException):
     pass
@@ -40,19 +41,23 @@ class WatershedFinder:
         self.skymap = skymap
 
     def to_file(self, dir_out: str) -> None:
-        filename = self._create_filename(obj="voids", dir_out=dir_out, on=self.on)
+        filename = self._create_filename(
+            obj="voids", dir_out=dir_out, on=self.on
+        )
         print("Save voids in -> ", filename)
         self.voids_df.to_hdf(filename, key="df")
-        filename = self._create_filename(obj="peaks", dir_out=dir_out, on=self.on)
+        filename = self._create_filename(
+            obj="peaks", dir_out=dir_out, on=self.on
+        )
         self.peaks_df.to_hdf(filename, key="df")
-        #IO.save_peaks_and_voids(filename)
+        # IO.save_peaks_and_voids(filename)
 
     def _create_filename(self, obj: str, dir_out: str, on: str) -> str:
         _filename = self.skymap._create_filename(
             self.skymap.map_file, self.skymap.quantity, on, extension="_"
         )
-        #_filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
-        _filename = ''.join(_filename.split(".")[:-1])
+        # _filename = ''.join(_filename.split("/")[-1].split(".")[:-1])
+        _filename = "".join(_filename.split(".")[:-1])
         return f"{dir_out}/{obj}_{_filename}.h5"
 
 
@@ -70,14 +75,34 @@ def _bin2df(file_in: str, npix: int, opening_angle: float) -> pd.DataFrame:
         "y_deg": data[:, 3] / 60,
         "y_pix": np.rint(data[:, 3] * npix / (60 * opening_angle)).astype(int),
         "rad_deg": data[:, 1] / 60,
-        "rad_pix": np.rint(data[:, 1] * npix / (60 * opening_angle)).astype(int),
+        "rad_pix": np.rint(data[:, 1] * npix / (60 * opening_angle)).astype(
+            int
+        ),
     }
-    
-    print("x_pix", np.min(void_dir["x_pix"]), np.max(void_dir["x_pix"]), np.min(void_dir["x_deg"]), np.max(void_dir["x_deg"]))
-    print("y_pix", np.min(void_dir["y_pix"]), np.max(void_dir["y_pix"]), np.min(void_dir["y_deg"]), np.max(void_dir["y_deg"]))
-    print("rad_pix", np.min(void_dir["rad_pix"]), np.max(void_dir["rad_pix"]), np.min(void_dir["rad_deg"]), np.max(void_dir["rad_deg"]))
+
+    print(
+        "x_pix",
+        np.min(void_dir["x_pix"]),
+        np.max(void_dir["x_pix"]),
+        np.min(void_dir["x_deg"]),
+        np.max(void_dir["x_deg"]),
+    )
+    print(
+        "y_pix",
+        np.min(void_dir["y_pix"]),
+        np.max(void_dir["y_pix"]),
+        np.min(void_dir["y_deg"]),
+        np.max(void_dir["y_deg"]),
+    )
+    print(
+        "rad_pix",
+        np.min(void_dir["rad_pix"]),
+        np.max(void_dir["rad_pix"]),
+        np.min(void_dir["rad_deg"]),
+        np.max(void_dir["rad_deg"]),
+    )
     print(len(void_dir["x_pix"]))
-    
+
     void_df = pd.DataFrame(data=void_dir)
     return void_df
 
@@ -102,7 +127,9 @@ def _npy2fits(mapfile, mapfile_fits, field_width) -> None:
         data.data = np.load(mapfile)
     elif extension == "npz":
         _tmp = np.load(mapfile)
-        data.data = _tmp["arr_0"]  #dict-key comes from lenstools.ConvergenceMap
+        data.data = _tmp[
+            "arr_0"
+        ]  # dict-key comes from lenstools.ConvergenceMap
     if os.path.exists(mapfile_fits):
         os.remove(mapfile_fits)
     data.writeto(mapfile_fits)
@@ -130,7 +157,9 @@ def _peaks2txt(val, pos, outfile) -> None:
     pos = np.asarray(pos)
     with open(outfile, "w") as txt_file:
         for ii in range(len(val)):
-            txt_file.write("%.4f %.4f %.4f\n" % (pos[ii, 0], pos[ii, 1], val[ii]))
+            txt_file.write(
+                "%.4f %.4f %.4f\n" % (pos[ii, 0], pos[ii, 1], val[ii])
+            )
     txt_file.close()
 
 

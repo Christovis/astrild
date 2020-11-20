@@ -1,7 +1,9 @@
 import sys
 import numpy as np
 
-sourceDirectoryPath = "/net/plato/data/users/cautun/bin/python/python_import/C++_code"
+sourceDirectoryPath = (
+    "/net/plato/data/users/cautun/bin/python/python_import/C++_code"
+)
 includePaths = ["/net/plato/data/users/cautun/Programs/stow/include"]
 libraryPaths = ["/net/plato/data/users/cautun/Programs/stow/lib"]
 
@@ -15,7 +17,17 @@ dtype2ctype = {
 
 
 def throwError(
-    s1="", s2="", s3="", s4="", s5="", s6="", s7="", s8="", s9="", s10="", EXIT=True
+    s1="",
+    s2="",
+    s3="",
+    s4="",
+    s5="",
+    s6="",
+    s7="",
+    s8="",
+    s9="",
+    s10="",
+    EXIT=True,
 ):
     """ Throws an error message and stop the program.
     The function can take up to 10 arguments."""
@@ -24,7 +36,9 @@ def throwError(
         sys.exit(1)
 
 
-def throwWarning(s1="", s2="", s3="", s4="", s5="", s6="", s7="", s8="", s9="", s10=""):
+def throwWarning(
+    s1="", s2="", s3="", s4="", s5="", s6="", s7="", s8="", s9="", s10=""
+):
     """ Throws a warning message but doies not stop the program.
     The function can take up to 10 arguments."""
     print("\n~~~ WARNING ~~~ ", s1, s2, s3, s4, s5, s6, s7, s8, s9, s10)
@@ -65,7 +79,9 @@ def ValidGridCoordinates(index, grid):
 
 def massInCell(densityHeader):
     """Computes what is the mass of a cell with average density - value=1. The result is returned in units of (M0/h)."""
-    rhoCritical = 27.7538e10  # the critical density in units of (M0/h) / (Mpc/h)^3
+    rhoCritical = (
+        27.7538e10
+    )  # the critical density in units of (M0/h) / (Mpc/h)^3
     length = BoxLength(densityHeader.box)
     volume = length[0] * length[1] * length[2] / densityHeader.totalGrid
     return rhoCritical * densityHeader.Omega0 * volume

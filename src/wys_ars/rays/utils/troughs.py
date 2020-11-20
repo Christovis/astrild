@@ -8,7 +8,11 @@ mw = 20.0  # map width in degrees
 nTroughs = 5000  # number of troughs to calculate
 frac = 0.2
 nbins = 50
-rads = [10.0 / 60.0, 20.0 / 60.0, 30.0 / 60.0]  # size of trough radii in degrees
+rads = [
+    10.0 / 60.0,
+    20.0 / 60.0,
+    30.0 / 60.0,
+]  # size of trough radii in degrees
 
 # The functions I use
 
@@ -116,7 +120,9 @@ def find_trough_profiles(
     for i in range(len(pos)):
         b, a = np.int64(pos[i] * mr / mw)
         for j in range(nbins):
-            profiles[i, j] = data[a - rad : a + rad, b - rad : b + rad][mask[j]].mean()
+            profiles[i, j] = data[a - rad : a + rad, b - rad : b + rad][
+                mask[j]
+            ].mean()
 
     return rbins * mw / mr, profiles.mean(axis=0)
 
@@ -125,7 +131,9 @@ def find_trough_profiles(
 
 pos, means = find_troughs(mapi.data, nTroughs, frac, rad, mw, mr, conv=True)
 pos_mean[k] = np.column_stack([pos, means])
-r, profile_conv[k] = find_trough_profiles(mapi_rough.data, pos, 2 * rad, nbins, mw, mr)
+r, profile_conv[k] = find_trough_profiles(
+    mapi_rough.data, pos, 2 * rad, nbins, mw, mr
+)
 
 delta_radius = 2.0 / float(nbins)
 r = delta_radius * (np.arange(0, nbins, 1) + (1.0 / 2.0))

@@ -16,7 +16,7 @@ def create_map(theta, phi, value, nside, npix, nsources):
 
     """
     # Go from HEALPix coordinates to indices
-    indices = hp.ang2pix(nside, theta[:], phi[:],)  # *180/np.pi,  # *180/np.pi,
+    indices = hp.ang2pix(nside, theta[:], phi[:])  # *180/np.pi,  # *180/np.pi,
 
     # Initiate the map and fill it with the values
     hpmap = np.ones(npix, dtype=np.float) * hp.UNSEEN

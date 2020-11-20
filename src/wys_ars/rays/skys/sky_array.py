@@ -1,15 +1,13 @@
 import os, sys, glob, copy
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple, TypeVar
 from importlib import import_module
 
 import pandas as pd
 import numpy as np
-from skimage import transform 
+from skimage import transform
 from scipy.interpolate import RectBivariateSpline
-from sklearn.feature_extraction.image import extract_patches_2d
-from sklearn.feature_extraction.image import reconstruct_from_patches_2d
 
 import astropy
 from astropy.io import fits
@@ -58,6 +56,7 @@ class SkyArray:
         merge:
         convert_convergence_to_deflection:
     """
+
     def __init__(
         self,
         skymap: np.ndarray,
@@ -99,7 +98,13 @@ class SkyArray:
         if file_extension == "h5":
             map_df = pd.read_hdf(map_file, key="df")
             return cls.from_dataframe(
-                map_df, opening_angle, quantity, dir_in, map_file, npix, convert_unit,
+                map_df,
+                opening_angle,
+                quantity,
+                dir_in,
+                map_file,
+                npix,
+                convert_unit,
             )
         elif file_extension in ["npy", "fits"]:
             if file_extension == "npy":
@@ -107,9 +112,9 @@ class SkyArray:
             elif file_extension == "fits":
                 map_array = ConvergenceMap.load(map_file, format="fits").data
             return cls.from_array(
-                map_array, opening_angle, quantity, dir_in, map_file,
+                map_array, opening_angle, quantity, dir_in, map_file
             )
-    
+
     @classmethod
     def from_dataframe(
         cls,
@@ -131,11 +136,13 @@ class SkyArray:
         """
         if convert_unit:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
-        map_array = SkyIO.transform_RayRamsesOutput_to_NumpyNdarray(map_df[quantity].values)
-        return cls.from_array(
-            map_array, opening_angle, quantity, dir_in, map_file,
+        map_array = SkyIO.transform_RayRamsesOutput_to_NumpyNdarray(
+            map_df[quantity].values
         )
-    
+        return cls.from_array(
+            map_array, opening_angle, quantity, dir_in, map_file
+        )
+
     @classmethod
     def from_array(
         cls,
@@ -152,51 +159,58 @@ class SkyArray:
             map_filename:
                 File path with which skymap pd.DataFrame can be loaded.
         """
+        assert map_array.shape[0] == map_array.shape[1]
         dirs = {"sim": dir_in}
         return cls(map_array, opening_angle, quantity, dirs, map_file)
-   
+
     @property
     def npix(self) -> int:
         return self._npix
-    
+
     @property
     def opening_angle(self) -> float:
         return self._opening_angle
 
-
-    def pdf(self, nbins: int, of: str="orig") -> dict:
+    def pdf(self, nbins: int, of: str = "orig") -> dict:
         _pdf = {}
         _pdf["values"], _pdf["bins"] = np.histogram(
-            self.data[of], bins=nbins, density=True,
+            self.data[of], bins=nbins, density=True
         )
         return _pdf
-
 
     def wl_peak_counts(
         self,
         nbins: int,
         field_conversion: str,
-        of: str="orig",
+        of: str = "orig",
         limits: Optional[tuple] = None,
     ) -> pd.DataFrame:
+        """
+        Signal peak counts. This is used commonly used in weak-lensing,
+        but it doesn't need to stop there...
+        """
         if field_conversion == "normalize":
             _map = self.data[of] - np.mean(self.skymap.data[of])
         else:
             _map = self.data[of]
 
         if limits is None:
-            lower_bound = np.percentile(self.data[of], 5)  #np.min(self.data[of])
-            upper_bound = np.percentile(self.data[of], 95)  #np.max(self.data[of])
+            lower_bound = np.percentile(
+                self.data[of], 5
+            )  # np.min(self.data[of])
+            upper_bound = np.percentile(
+                self.data[of], 95
+            )  # np.max(self.data[of])
         else:
             lower_bound = min(limits)
             upper_bound = max(limits)
 
         map_bins = np.arange(
-            lower_bound, upper_bound, (upper_bound - lower_bound) / nbins,
+            lower_bound, upper_bound, (upper_bound - lower_bound) / nbins
         )
-        _map = ConvergenceMap(data=_map, angle=self._opening_angle*un.deg)
+        _map = ConvergenceMap(data=_map, angle=self._opening_angle * un.deg)
         _kappa, _pos = _map.locatePeaks(map_bins)
-        
+
         _hist, _kappa = np.histogram(_kappa, bins=nbins, density=False)
         _kappa = (_kappa[1:] + _kappa[:-1]) / 2
         peak_counts_dic = {"kappa": _kappa, "counts": _hist}
@@ -210,49 +224,59 @@ class SkyArray:
         of: Optional[str] = None,
         img: Optional[np.ndarray] = None,
         rtn: bool = False,
+        orig_data: str = None,
     ) -> Union[np.ndarray, None]:
-        if of:
-            img = copy.deepcopy(self.data[of])
-        img = transform.resize(image, (npix, npix), anti_aliasing=True,)
+        """
+        Lower the nr. of pixels of image. Useful for tests.
+        
+        Args:
+            npix: the new pixel nr. per edge of the image
+            of: skymap image identifier.
+            orig_data: What to do with data of the image to be processed:
+                e.g. no, shallow, or deep copy
+        """
+        img = self._manage_img_data(of, img, orig_data)
+        img = transform.resize(img, (npix, npix), anti_aliasing=True)
         if rtn:
             return img
         else:
             self.data[of] = img
 
-
+    
     def crop(
         self,
-        xlimit: Union[tuple, list, np.array],
-        ylimit: Union[tuple, list, np.array],
+        xlimit: Union[Tuple, List, np.array],
+        ylimit: Union[Tuple, List, np.array],
         of: Optional[str] = None,
         img: Optional[np.ndarray] = None,
         rtn: bool = False,
+        orig_data: str = None,
     ) -> Union[np.ndarray, None]:
         """
         Zoom into sky_array map.
 
         Args:
-            xlimit and ylimit:
-                Boundaries of zoom. If given in ints units are pixels,
+            x,ylimit: Boundaries of zoom. If given in ints units are pixels,
                 if floats percentages are used.
-            of:
-                skymap image identifier.
+            of: skymap image identifier.
+            orig_data: What to do with data of the image to be processed:
+                e.g. no, shallow, or deep copy
         """
-        if of:
-            img = copy.deepcopy(self.data[of])
+        img = self._manage_img_data(of, img, orig_data)
         xlimit = np.asarray(xlimit)
         ylimit = np.asarray(ylimit)
+        assert np.diff(xlimit) == np.diff(ylimit), SkyArrayWarning("The whole class is currently designed for square images.")
         if isinstance(xlimit[0], float):
             _npix = img.shape[0]
-            xlimit = (_npix * xlimit/100).astype(int)
-            ylimit = (_npix * ylimit/100).astype(int)
-        zoom = img[xlimit[0]:xlimit[1], ylimit[0]:ylimit[1]]
+            xlimit = (_npix * xlimit / 100).astype(int)
+            ylimit = (_npix * ylimit / 100).astype(int)
+        zoom = img[xlimit[0] : xlimit[1], ylimit[0] : ylimit[1]]
         if rtn:
             return zoom
         else:
             print(f"Image crop to x={xlimit} and y={ylimit}.")
             self.data[of] = zoom
-            self._opening_angle = np.int(
+            self._opening_angle = (
                 self._opening_angle * abs(np.diff(xlimit)) / self._npix
             )
             self._npix = zoom.shape[0]
@@ -264,51 +288,54 @@ class SkyArray:
         of: Optional[str] = None,
         img: Optional[np.ndarray] = None,
         rtn: bool = False,
+        orig_data: str = None,
     ) -> Union[List[np.ndarray], None]:
         """
         Divide image into tiles.
         Should use sklearn.feature_extraction.image.extract_patches_2d
 
         Args:
-            ntiles:
-                Nr. of tiles per edge (as to be in 2^n).
+            ntiles: Nr. of tiles per edge (as to be in 2^n).
+            orig_data: What to do with data of the image to be processed:
+                e.g. no, shallow, or deep copy
         """
-        if of:
-            img = copy.deepcopy(self.data[of])
+        img = self._manage_img_data(of, img, orig_data)
         npix = img.shape[0]
-        edges = list(np.arange(0, npix, npix/ntiles)) + [npix]
+        edges = list(np.arange(0, npix, npix / ntiles)) + [npix]
         edges = np.array(
-            [edges[idx:idx+2] for idx in range(len(edges)-1)]
+            [edges[idx : idx + 2] for idx in range(len(edges) - 1)]
         ).astype(int)
         tiles = []
         for xlim in edges:
             for ylim in edges:
                 tiles.append(self.crop(xlim, ylim, img=img, rtn=True))
-        print(f"The image is divided into {len(tiles)} tiles.")
+        print(
+            f"The image is divided into {len(tiles)} tiles, " +\
+            f"each with {tiles[0].shape[0]}^2 pixels."
+        )
         tiles = np.asarray(tiles)
         if rtn:
             return tiles
         else:
             self.tiles = tiles
+            self._tile_npix = tiles[0].shape[0]
+            self._tile_opening_angle = self._opening_angle * self._tile_npix / self._npix
 
 
     def merge(
-        self,
-        tiles: np.ndarray,
-        rtn: bool = False,
+        self, tiles: np.ndarray, rtn: bool = False
     ) -> Union[np.ndarray, None]:
         """
         Merge tiles created with self.division.
         Should use sklearn.feature_extraction.image.reconstruct_from_patches_2d
 
         Args:
-            tiles:
-                3D
+            tiles: 3D
         """
         ntiles = len(tiles)
         nrows = int(np.sqrt(ntiles))
-        _parts = np.arange(0, ntiles+nrows, nrows)
-        row_tile_idx = [(_parts[ii], _parts[ii+1]) for ii in range(nrows)]
+        _parts = np.arange(0, ntiles + nrows, nrows)
+        row_tile_idx = [(_parts[ii], _parts[ii + 1]) for ii in range(nrows)]
         row_tiles = []
         for idx in range(nrows):
             start = row_tile_idx[idx][0]
@@ -324,25 +351,22 @@ class SkyArray:
         self,
         filter_dsc: dict,
         on: Optional[str] = None,
-        sky_array: Optional[np.ndarray] = None,
+        img: Optional[np.ndarray] = None,
         rtn: bool = False,
+        orig_data: str = None,
     ) -> Union[np.ndarray, None]:
         """
         Convolve kernel (filter_dsc) over skymap image (on)
         Args:
-            filter_dsc:
-                Kernel description. Note that theta_i should be given in astropy.units!
-            on:
-                skymap image identifier.
+            filter_dsc: Kernel description.
+                Note that theta_i should be given in astropy.units!
+            on: skymap image identifier.
+            orig_data: What to do with data of the image to be processed:
+                e.g. no, shallow, or deep copy
         """
         # load rays/utils/filters.py package for dynamic function call
         module = import_module("wys_ars.rays.utils")
-        if on == "orig_gsn":
-            _map = copy.deepcopy(self.add_galaxy_shape_noise())
-        elif sky_array is None:
-            _map = copy.deepcopy(self.data[on])
-        else:
-            _map = copy.deepcopy(sky_array)
+        img = self._manage_img_data(on, img, orig_data)
 
         map_name = [on]
         for filter_name, args in filter_dsc.items():
@@ -353,56 +377,50 @@ class SkyArray:
 
             clas = getattr(module, "Filters")
             fct = getattr(clas, filter_name)
-            _map = fct(_map, self._opening_angle*un.deg, **args)
+            img = fct(img, self._opening_angle * un.deg, **args)
         if rtn:
-            return _map
+            return img
         else:
-            self.data[("_").join(map_name)] = _map
+            self.data[("_").join(map_name)] = img
 
 
     def create_galaxy_shape_noise(
-        self, std: float, ngal: float, rnd_seed: Optional[int] = None,
+        self, std: float, ngal: float, rnd_seed: Optional[int] = None
     ) -> None:
         """
         Galaxy Shape Noise (GSN)
         e.g.: https://arxiv.org/pdf/1907.06657.pdf
 
         Args:
-            std:
-                dispersion of source galaxy intrinsic ellipticity, 0.4 for LSST
-            ngal:
-                number density of galaxies, 40 for LSST; [arcmin^2]
-            rnd_seed:
-                Fix random seed, for reproducability.
+            std: dispersion of source galaxy intrinsic ellipticity, 0.4 for LSST
+            ngal: Nr. density of galaxies, 40 for LSST; [arcmin^2]
+            rnd_seed: Fix random seed, for reproducability.
         Returns:
             gsn_map:
                 self.npix x self.npix np.array containing the GSN
         """
         theta_pix = 60 * self._opening_angle / self._npix
-        std_pix = 0.007 #np.sqrt(std ** 2 / (2*theta_pix*ngal))
+        std_pix = 0.007  # np.sqrt(std ** 2 / (2*theta_pix*ngal))
         if rnd_seed is None:
             self.data["gsn"] = np.random.normal(
-                loc=0, scale=std_pix, size=[self._npix, self._npix],
+                loc=0, scale=std_pix, size=[self._npix, self._npix]
             )
         else:
             rg = np.random.Generator(np.random.PCG64(rnd_seed))
             self.data["gsn"] = rg.normal(
-                loc=0, scale=std_pix, size=[self._npix, self._npix],
+                loc=0, scale=std_pix, size=[self._npix, self._npix]
             )
         print(f"The GSN map sigma is {np.std(self.data['gsn'])}", std_pix)
 
-    
+
     def add_galaxy_shape_noise(self, on: str = "orig") -> np.ndarray:
         """
         Add GSN on top of skymap.
         
         Args:
-            std:
-                dispersion of source galaxy intrinsic ellipticity, 0.4 for LSST
-            ngal:
-                number density of galaxies, 40 for LSST; [arcmin^2]
-            rnd_seed:
-                Fix random seed, for reproducability.
+            std: dispersion of source galaxy intrinsic ellipticity, 0.4 for LSST
+            ngal: Nr. density of galaxies, 40 for LSST; [arcmin^2]
+            rnd_seed: Fix random seed, for reproducability.
         """
         if self.quantity == "kappa_2":
             self.data["orig_gsn"] = self.data["orig"] + self.data["gsn"]
@@ -410,7 +428,6 @@ class SkyArray:
         else:
             raise SkyArrayWarning(f"GSN should not be added to {self.quantity}")
 
-    
     def create_cmb(
         self,
         filepath_cl: str,
@@ -423,14 +440,10 @@ class SkyArray:
         for which the flat-sky approximation holds (ell > 10).
 
         Args:
-            filepath_cl:
-                angular power spectrum of CMB
-            theta:
-                Edge length of the square field-of-view [deg]
-            nside:
-                Nr. of pixels per edge of the output full-sky map
-            rnd_seed:
-                Fix random seed, for reproducability.
+            filepath_cl: angular power spectrum of CMB
+            theta: Edge length of the square field-of-view [deg]
+            nside: Nr. of pixels per edge of the output full-sky map
+            rnd_seed: Fix random seed, for reproducability.
 
         Returns:
             cmb_map:
@@ -438,20 +451,17 @@ class SkyArray:
         if rnd_seed:
             np.random.seed(rnd_seed)
         Nx = Ny = self._npix
-        Lx = Ly = self._opening_angle * np.pi / 180.
+        Lx = Ly = self._opening_angle * np.pi / 180.0
 
         cl_tt_cmb = np.load(filepath_cl)[1]
         cmb = nmt.synfast_flat(
-            Nx, Ny, Lx, Ly,
-            cls=np.array([cl_tt_cmb]),
-            spin_arr=np.array([0])
+            Nx, Ny, Lx, Ly, cls=np.array([cl_tt_cmb]), spin_arr=np.array([0])
         )[0]
         if rtn:
             return cmb
         else:
             self.data["cmb"] = cmb
 
-    
     def add_cmb(
         self,
         filepath_cl: str,
@@ -477,73 +487,97 @@ class SkyArray:
                     self.data[f"{on}_cmb"] = _map
         else:
             raise SkyArrayWarning(f"CMB should not be added to {self.quantity}")
-    
-    
+
     def convert_convergence_to_deflection(
         self,
         on: Optional[str] = None,
-        sky_array: Optional[np.ndarray] = None,
-        rtn: bool = False,
-) -> Tuple[np.ndarray, np.ndarray]:
+        img: Optional[np.ndarray] = None,
+        npix: Optional[int] = None,
+        opening_angle: Optional[float] = None,
+        rtn: bool = True,
+        orig_data: str = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Args:
-            on:
-                String to indicate which map in self.data should be used.
-            sky_array:
-                2D convergence map.
-            rtn:
-                Bool to indicate whether to attach result to class object or return.
+            on: String to indicate which map in self.data should be used.
+            img: 2D convergence map.
+            rtn: Bool to indicate whether to attach result to class object or return.
+            orig_data: What to do with data of the image to be processed:
+                e.g. no, shallow, or deep copy
 
         Returns:
             alpha_1,2: 2D deflection angle map [rad]
         """
-        assert self.quantity in ["kappa_1", "kappa_2"], (
-            "Deflection angle can only be calculated from the kappa map"
-        )
-        if sky_array is None:
-            _map = copy.deepcopy(self.data[on])
-        else:
-            _map = copy.deepcopy(sky_array)
-        alpha_1, alpha_2 = SkyUtils.convert_convergence_to_deflection_cython(
-            _map, self._npix, self._opening_angle*un.deg,
+        #TODO handle tiles/multiple images
+        assert self.quantity in [
+            "kappa_1",
+            "kappa_2",
+        ], "Deflection angle can only be calculated from the kappa map"
+        img = self._manage_img_data(on, img, orig_data)
+
+        if npix is None: npix = self._npix
+        if opening_angle is None: opening_angle = self._opening_angle
+
+        alpha_1, alpha_2 = SkyUtils.convert_convergence_to_deflection_ctypes(
+            img, npix, opening_angle * un.deg
         )
         if rtn:
             return alpha_2, alpha_1
         else:
             self.data["defltx"] = alpha_2
             self.data["deflty"] = alpha_1
-    
 
     def convert_deflection_to_shear(
         self,
         on: Optional[str] = None,
-        sky_array: Optional[np.ndarray] = None,
+        img: Optional[np.ndarray] = None,
         rtn: bool = False,
-) -> Tuple[np.ndarray, np.ndarray]:
+        orig_data: str = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Args:
-            on:
-                String to indicate which map in self.data should be used.
-            sky_array:
-                2D convergence map.
-            rtn:
-                Bool to indicate whether to attach result to class object or return.
+            on: String to indicate which map in self.data should be used.
+            img: 2D convergence map.
+            rtn: Bool to indicate whether to attach result to class object or return.
+            orig_data: What to do with data of the image to be processed:
+                e.g. no, shallow, or deep copy
 
         Returns:
             gamma_1,2: 2D shear map [-]
         """
-        assert self.quantity in ["alpha"], (
-            "Shear can only be calculated from the deflection angle map"
-        )
-        if sky_array is None:
-            _map = copy.deepcopy(self.data[on])
-        else:
-            _map = copy.deepcopy(sky_array)
+        assert self.quantity in [
+            "alpha"
+        ], "Shear can only be calculated from the deflection angle map"
+        img = self._manage_img_data(on, img, orig_data)
         gamma_1, gamma_2 = SkyUtils.convert_deflection_to_shear(
-            _map, self._npix, self._opening_angle*un.deg,
+            img, self._npix, self._opening_angle * un.deg
         )
         if rtn:
             return gamma_2, gamma_1
         else:
             self.data["gammax"] = gamma_2
             self.data["gammay"] = gamma_1
+    
+
+    def _manage_img_data(
+        self,
+        of: Optional[str] = None,
+        img: Optional[np.ndarray] = None,
+        orig_data: str = None,
+    ) -> np.ndarray:
+        """ Handle the memory of the image to be processed """
+        #TODO handle images that can be produces, but haven't been yet
+        #TODO maybe things belongs better into sky_utils or even further up
+        if of:
+            assert of in list(self.data.keys()), "Map does not exist."
+            img = copy.deepcopy(self.data[of])
+        
+        if orig_data == "shallow":
+            # Only a shallow copy here, as in my current use case, memory can
+            # easily explode (especially in Dipoles.get_transverse_velocity)
+            cimg = copy.copy(img)
+        elif orig_data == "deep":
+            cimg = copy.deepcopy(img)
+        else:
+            cimg = img
+        return cimg

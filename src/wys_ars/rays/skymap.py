@@ -24,6 +24,7 @@ from wys_ars.io import IO
 dir_src = Path(__file__).parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
 
+
 class SkyMapWarning(BaseException):
     pass
 
@@ -65,29 +66,45 @@ class SkyMap:
                 Indicate what format the sky should have, as it makes different
                 operations are accessible: [healpix, array]
         """
-        assert sky_type in ["array", "healpix"], "The declared 'sky_type' is not known"
-        assert map_file, SkyMapWarning('There is no file being pointed at')
+        assert sky_type in [
+            "array",
+            "healpix",
+        ], "The declared 'sky_type' is not known"
+        assert map_file, SkyMapWarning("There is no file being pointed at")
 
         file_extension = map_file.split(".")[-1]
         if sky_type == "array":
             if file_extension == "h5":
                 map_df = pd.read_hdf(map_file, key="df")
                 skymap = SkyArray.from_dataframe(
-                    map_df, npix, theta, quantity, dir_in, map_file, convert_unit,
+                    map_df,
+                    npix,
+                    theta,
+                    quantity,
+                    dir_in,
+                    map_file,
+                    convert_unit,
                 )
-        
-            elif file_extension in ["npy", "fits"]: # only possible for SkyArray
-                    if file_extension == "npy":
-                        map_array = np.load(map_file)
-                    elif file_extension == "fits":
-                        map_array = ConvergenceMap.load(map_file, format="fits").data
-                    skymap = SkyArray.from_array(
-                        map_array, npix, theta, quantity, dir_in, map_file,
-                    )
+
+            elif file_extension in [
+                "npy",
+                "fits",
+            ]:  # only possible for SkyArray
+                if file_extension == "npy":
+                    map_array = np.load(map_file)
+                elif file_extension == "fits":
+                    map_array = ConvergenceMap.load(
+                        map_file, format="fits"
+                    ).data
+                skymap = SkyArray.from_array(
+                    map_array, npix, theta, quantity, dir_in, map_file
+                )
         elif sky_type == "healpix":
-            skymap = SkyHealpix.from_file(map_file, npix, theta, quantity, dir_in)
+            skymap = SkyHealpix.from_file(
+                map_file, npix, theta, quantity, dir_in
+            )
         return skymap
- 
+
     def from_dataframe(
         npix: int,
         theta: float,
@@ -111,24 +128,27 @@ class SkyMap:
                 Indicate what format the sky should have, as it makes different
                 operations are accessible: [healpix, array]
         """
-        assert sky_type in ["array", "healpix"], "The declared 'sky_type' is not known"
+        assert sky_type in [
+            "array",
+            "healpix",
+        ], "The declared 'sky_type' is not known"
         if sky_type == "array":
             skymap = SkyArray.from_dataframe(
-                map_df, npix, theta, quantity, dir_in, map_file, convert_unit,
+                map_df, npix, theta, quantity, dir_in, map_file, convert_unit
             )
         elif sky_type == "healpix":
             skymap = SkyHealpix.from_dataframe(
-                npix, theta, quantity, dir_in, map_df, map_file, convert_unit,
+                npix, theta, quantity, dir_in, map_df, map_file, convert_unit
             )
         return skymap
- 
+
     def from_array(
         map_array: np.array,
         npix: int,
         theta: float,
         quantity: str,
         dir_in: str,
-        map_file: Optional[str]=None,
+        map_file: Optional[str] = None,
         sky_type: str = "array",
     ) -> Union[SkyArray, SkyHealpix]:
         """
@@ -143,14 +163,14 @@ class SkyMap:
         """
         if sky_type == "array":
             skymap = SkyArray.from_array(
-                map_array, npix, theta, quantity, dir_in, map_file,
+                map_array, npix, theta, quantity, dir_in, map_file
             )
         elif sky_type == "healpix":
             skymap = SkyHealpix.from_array(
-                map_array, npix, theta, quantity, dir_in, map_file,
+                map_array, npix, theta, quantity, dir_in, map_file
             )
         return skymap
-    
+
     def _get_files(self, ray_nrs) -> None:
         """
         Get filenames of save skymaps based on file describtion.
@@ -168,4 +188,3 @@ class SkyMap:
                 self.files["map"].append(
                     self.dirs["sim"] + "Ray_maps_output%05d.h5" % ray_nr
                 )
-    

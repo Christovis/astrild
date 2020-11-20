@@ -44,6 +44,7 @@ class Filters:
         Args:
         """
         from time import time
+
         t0 = time()
         # extract reference patches from clean data
         npix = clean_data.shape[0]
@@ -58,11 +59,11 @@ class Filters:
             n_components=100,
             alpha=0.1,
             n_iter=500,
-            #batch_size=3,
-            #fit_algorithm='cd',
-            #random_state=rng,
-            #positive_dict=True,
-            #positive_code=True,
+            # batch_size=3,
+            # fit_algorithm='cd',
+            # random_state=rng,
+            # positive_dict=True,
+            # positive_code=True,
         ).fit(data)
         dt = time() - t0
         components = dico.components_
@@ -70,12 +71,9 @@ class Filters:
         data = extract_patches_2d(noisy_data, (patch_npix, patch_npix))
         data = data.reshape(data.shape[0], -1)
         intercept = np.mean(data, axis=0)
-        data -= intercept 
-        kwargs = {'transform_n_nonzero_coefs': 2}
-        dico.set_params(
-            transform_algorithm="omp",
-            **kwargs,
-        )
+        data -= intercept
+        kwargs = {"transform_n_nonzero_coefs": 2}
+        dico.set_params(transform_algorithm="omp", **kwargs)
         code = dico.transform(data)
         patches = np.dot(code, components)
         patches += intercept
@@ -84,10 +82,7 @@ class Filters:
         dt = time() - t0
         return cleaned_img
 
-    def pca(
-        tiles: np.ndarray,
-        n_components: int = 5,
-    ) -> np.ndarray:
+    def pca(tiles: np.ndarray, n_components: int = 5) -> np.ndarray:
         """
         CMB fore- and background seperation. Important for detection
         of e.g. dipoles on deltaT map. Note that PCA perfoms just as good as
@@ -100,22 +95,19 @@ class Filters:
         """
         ntiles = len(tiles)
         npix = tiles[0].shape[0]
-        tiles = (tiles).reshape(ntiles, npix**2)
+        tiles = (tiles).reshape(ntiles, npix ** 2)
         # ensure data is mean-centred
         for idx in range(ntiles):
             tiles[idx] -= np.mean(tiles[idx])
         # compute principle components
-        pca = PCA(
-            n_components=n_components,
-            whiten=True,
-        ).fit(tiles)
+        pca = PCA(n_components=n_components, whiten=True).fit(tiles)
         # reconstruct independent signals based on orthogonal components
         components = pca.transform(tiles)
         cleaned_tiles = pca.inverse_transform(components)
         return cleaned_tiles.reshape(ntiles, npix, npix)
 
     def apodization(
-        img: np.ndarray, theta: float, theta_i: Optional[float] = None,
+        img: np.ndarray, theta: float, theta_i: Optional[float] = None
     ) -> np.ndarray:
         """
         Suppress image values beyond theta_i from the centre of the image.
@@ -131,11 +123,12 @@ class Filters:
         """
         npix = len(img)
         window = np.outer(
-            signal.hann(npix), signal.hann(npix),
-            #signal.general_gaussian(npix, p=6, sig=theta_i),
-            #signal.general_gaussian(npix, p=6, sig=theta_i),
+            signal.hann(npix),
+            signal.hann(npix),
+            # signal.general_gaussian(npix, p=6, sig=theta_i),
+            # signal.general_gaussian(npix, p=6, sig=theta_i),
         )
-        return img*window
+        return img * window
 
     def gaussian(
         img: np.ndarray,
@@ -158,14 +151,20 @@ class Filters:
         img = ConvergenceMap(data=img, angle=theta.to(un.deg))
         if len(img.data) < 500:
             # for image with less than 500^2 images real-space is faster
-            img = img.smooth(scale_angle=theta_i.to(un.arcmin), kind="gaussian", **kwargs)
+            img = img.smooth(
+                scale_angle=theta_i.to(un.arcmin), kind="gaussian", **kwargs
+            )
         else:
             # for larger images FFT is optimal
-            img = img.smooth(scale_angle=theta_i.to(un.arcmin), kind="gaussianFFT", **kwargs)
+            img = img.smooth(
+                scale_angle=theta_i.to(un.arcmin), kind="gaussianFFT", **kwargs
+            )
         return img.data
 
     def gaussian_high_pass(
-        img: np.ndarray, theta: un.quantity.Quantity, theta_i: un.quantity.Quantity,
+        img: np.ndarray,
+        theta: un.quantity.Quantity,
+        theta_i: un.quantity.Quantity,
     ) -> np.ndarray:
         """
         Gaussian high-pass filter
@@ -183,7 +182,7 @@ class Filters:
         img: np.ndarray,
         theta: un.quantity.Quantity,
         theta_i: un.quantity.Quantity,
-        direction: Union[int,np.ndarray]=1,
+        direction: Union[int, np.ndarray] = 1,
     ) -> np.ndarray:
         """
         Omni-directional third derivative gaussian kernel (also called DGD3 filter),
@@ -202,22 +201,34 @@ class Filters:
         # Compute the smoothing scale in pixel units
         theta_i_pix = np.ceil(
             img.shape[0] * theta_i.to(un.deg).value / theta.to(un.deg).value
-        ).astype('int')
+        ).astype("int")
         gauss_1 = ndimage.gaussian_filter(
-            img, sigma=theta_i_pix*0.5, order=3*direction, output=np.float64, mode='nearest'
+            img,
+            sigma=theta_i_pix * 0.5,
+            order=3 * direction,
+            output=np.float64,
+            mode="nearest",
         )
         gauss_2 = ndimage.gaussian_filter(
-            img, sigma=theta_i_pix*1.0, order=3*direction, output=np.float64, mode='nearest'
+            img,
+            sigma=theta_i_pix * 1.0,
+            order=3 * direction,
+            output=np.float64,
+            mode="nearest",
         )
         gauss_3 = ndimage.gaussian_filter(
-            img, sigma=theta_i_pix*2.0, order=3*direction, output=np.float64, mode='nearest'
+            img,
+            sigma=theta_i_pix * 2.0,
+            order=3 * direction,
+            output=np.float64,
+            mode="nearest",
         )
         return gauss_1 - gauss_2 + gauss_3
-    
+
     def gaussian_third_derivative_2(
         img: np.ndarray,
         theta: un.quantity.Quantity,
-        theta_i:un.quantity.Quantity,
+        theta_i: un.quantity.Quantity,
         direction: int,
     ) -> np.ndarray:
         """
@@ -232,38 +243,47 @@ class Filters:
             theta_i: [some angular distance]
             sigma: ideally it should be the width of halo, R200. units are [pix]
         """
+
         def _gauss_dist(theta: np.ndarray, sigma: int) -> np.ndarray:
-            return (np.exp(-theta**2 / (2*sigma**2)) / (2*np.pi*sigma**2))
+            return np.exp(-theta ** 2 / (2 * sigma ** 2)) / (
+                2 * np.pi * sigma ** 2
+            )
 
         def _create_dgd3(
-            dist: np.ndarray, theta_fov: float, theta_i: int, axis: int,
+            dist: np.ndarray, theta_fov: float, theta_i: int, axis: int
         ) -> np.ndarray:
             """ Filters Function """
             gauss = (
-                _gauss_dist(dist, theta_i*0.5) -\
-                _gauss_dist(dist, theta_i)*0.75 +\
-                _gauss_dist(dist, theta_i*2.0)*0.5
+                _gauss_dist(dist, theta_i * 0.5)
+                - _gauss_dist(dist, theta_i) * 0.75
+                + _gauss_dist(dist, theta_i * 2.0) * 0.5
             )
-            d1_gauss = np.gradient(gauss, theta_fov/len(dist), axis=axis, edge_order=2)
-            d2_gauss = np.gradient(d1_gauss, theta_fov/len(dist), axis=axis, edge_order=2)
-            d3_gauss = np.gradient(d2_gauss, theta_fov/len(dist), axis=axis, edge_order=2)
+            d1_gauss = np.gradient(
+                gauss, theta_fov / len(dist), axis=axis, edge_order=2
+            )
+            d2_gauss = np.gradient(
+                d1_gauss, theta_fov / len(dist), axis=axis, edge_order=2
+            )
+            d3_gauss = np.gradient(
+                d2_gauss, theta_fov / len(dist), axis=axis, edge_order=2
+            )
             return d3_gauss
 
         _npix = len(img)
-        x1edge = np.linspace(1, _npix, _npix) - _npix/2 - 0.5
+        x1edge = np.linspace(1, _npix, _npix) - _npix / 2 - 0.5
         x, y = np.meshgrid(x1edge, x1edge)
-        dist = np.sqrt(x**2 + y**2)
+        dist = np.sqrt(x ** 2 + y ** 2)
         theta_fov_deg = theta.to(un.deg).value * len(dist) / _npix
         theta_i_pix = np.ceil(
             _npix * theta_i.to(un.deg).value / theta.to(un.deg).value
-        ).astype('int')
+        ).astype("int")
         window = abs(_create_dgd3(dist, theta_fov_deg, theta_i_pix, direction))
         return np.multiply(window, img)
-    
+
     def gaussian_first_derivative(
         img: np.ndarray,
         theta: un.quantity.Quantity,
-        theta_i:un.quantity.Quantity,
+        theta_i: un.quantity.Quantity,
         direction: int,
     ) -> np.ndarray:
         """
@@ -278,29 +298,32 @@ class Filters:
             theta_i: [some angular distance]
             sigma: ideally it should be the width of halo, R200. units are [pix]
         """
+
         def _gauss_dist(theta: np.ndarray, sigma: int) -> np.ndarray:
-            return (np.exp(-theta**2 / (2*sigma**2)) / (2*np.pi*sigma**2))
+            return np.exp(-theta ** 2 / (2 * sigma ** 2)) / (
+                2 * np.pi * sigma ** 2
+            )
 
         def _create_dgd3(
-            dist: np.ndarray, theta_fov: float, theta_i: int, axis: int,
+            dist: np.ndarray, theta_fov: float, theta_i: int, axis: int
         ) -> np.ndarray:
             """ Filters Function """
             d1_gauss = np.gradient(
-                _gauss_dist(dist, theta_i*0.5),
-                theta_fov/len(dist),
+                _gauss_dist(dist, theta_i * 0.5),
+                theta_fov / len(dist),
                 axis=axis,
                 edge_order=2,
             )
             return d1_gauss
 
         _npix = len(img)
-        x1edge = np.linspace(1, _npix, _npix) - _npix/2 - 0.5
+        x1edge = np.linspace(1, _npix, _npix) - _npix / 2 - 0.5
         x, y = np.meshgrid(x1edge, x1edge)
-        dist = np.sqrt(x**2 + y**2)
+        dist = np.sqrt(x ** 2 + y ** 2)
         theta_fov_deg = theta.to(un.deg).value * len(dist) / _npix
         theta_i_pix = np.ceil(
             _npix * theta_i.to(un.deg).value / theta.to(un.deg).value
-        ).astype('int')
+        ).astype("int")
         window = _create_dgd3(dist, theta_fov_deg, theta_i_pix, direction)
         return np.multiply(window, img)
 
@@ -319,12 +342,16 @@ class Filters:
             theta_i: Inner radius of CG-filter
             theta_o: Outer radius of CG-filter
         """
-        def _create_cg(theta: np.ndarray, theta_i: float, theta_o: float) -> np.ndarray:
+
+        def _create_cg(
+            theta: np.ndarray, theta_i: float, theta_o: float
+        ) -> np.ndarray:
             """ Filters Function """
             x = theta / theta_i
             x_o = theta_o / theta_i
-            gt = (np.exp(-x**2.) / (np.pi * theta_i**2.)) - \
-                ((1. - np.exp(-x_o**2.)) / (np.pi * theta_o**2.))
+            gt = (np.exp(-x ** 2.0) / (np.pi * theta_i ** 2.0)) - (
+                (1.0 - np.exp(-x_o ** 2.0)) / (np.pi * theta_o ** 2.0)
+            )
             gt[theta_o < theta] = 0
             return gt
 
@@ -333,11 +360,15 @@ class Filters:
         # convert filter specifications from arcmin to pixel-width units
         theta_i = theta_i.to(un.deg).value / pw
         theta_o = theta_o.to(un.deg).value / pw
-        theta_o_int = np.ceil(theta_o).astype('int') #round up theta_o to be safe
+        theta_o_int = np.ceil(theta_o).astype(
+            "int"
+        )  # round up theta_o to be safe
         # define grid to map the filter onto, which we will use for the convolution
         a = b = 0
-        y, x = np.ogrid[a-theta_o_int:a+theta_o_int, b-theta_o_int:b+theta_o_int]
-        dist = np.sqrt(x**2 + y**2)
+        y, x = np.ogrid[
+            a - theta_o_int : a + theta_o_int, b - theta_o_int : b + theta_o_int
+        ]
+        dist = np.sqrt(x ** 2 + y ** 2)
         # pass the grid into the filter function
         window = _create_cg(dist, theta_i, theta_o)
         return convolve(img, window)
@@ -375,7 +406,7 @@ class Filters:
         annulus_value = np.zeros(args["Nbins"])
         for pp in range(len(eta)):
             annulus_value[eta[pp]] += mapp[
-                obj_posy + pix_xx[pp], obj_posx + pix_yy[pp],
+                obj_posy + pix_xx[pp], obj_posx + pix_yy[pp]
             ]
 
         # Mean value in 0 -> rad_filter
@@ -389,7 +420,7 @@ class Filters:
         return white_hat - black_hat
 
 
-#def cthf_profile(profiles, extend, Nbins):
+# def cthf_profile(profiles, extend, Nbins):
 #    """
 #    Compensated top-hat filter applied to profiles
 #    alpha: float

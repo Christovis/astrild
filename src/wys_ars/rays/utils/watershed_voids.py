@@ -42,7 +42,9 @@ class VoidFinder:
 
     def find_void_positions(self):
         # find local minima
-        local_min = np.array(local_minima(self.img_smooth, indices=True)).astype(float)
+        local_min = np.array(
+            local_minima(self.img_smooth, indices=True)
+        ).astype(float)
         self.pos = {}
         self.pos["pix"] = local_min[::-1].T.astype(int)
         self.pos["deg"] = (
@@ -53,7 +55,9 @@ class VoidFinder:
 
         # create compensated top-hat filter
         deg_per_pix = 20 / self.img_smooth.shape[0]
-        kernel_width_pix = int(self.kernel_width / deg_per_pix)  # convert deg to pix
+        kernel_width_pix = int(
+            self.kernel_width / deg_per_pix
+        )  # convert deg to pix
         self.cth_rad = np.array(
             [int(2 * kernel_width_pix), int(2 * kernel_width_pix * np.sqrt(2))]
         )

@@ -57,7 +57,8 @@ class Voids:
     @classmethod
     def from_file(
         cls,
-        finder: str, skymap_dsc: dict,
+        finder: str,
+        skymap_dsc: dict,
         ffile: Optional[str] = None,
         file_dsc: Optional[dict] = None,
     ) -> "Voids":
@@ -108,7 +109,9 @@ class Voids:
                 lc_nr,
             )
             data = pd.read_hdf(fname, key="df")
-            finder_spec = { "name": finder, "sigmas": {
+            finder_spec = {
+                "name": finder,
+                "sigmas": {
                     "name": "void_min_den",
                     "values": np.linspace(
                         data["void_min_den"].min(),
@@ -120,9 +123,7 @@ class Voids:
         elif finder == "wvf":
             data = pd.read_hdf(_file, key="df")
             finder_spec = None
-            finder_spec = {
-                "name": finder,
-            }
+            finder_spec = {"name": finder}
         return Voids(_file, data, finder_spec, skymap_dsc)
 
     def _read_skymap(self, file_in: str) -> np.ndarray:
@@ -136,7 +137,6 @@ class Voids:
                 "arr_0"
             ]  # dict-key comes from lenstools.ConvergenceMap
         return skymap
-
 
     def get_void_size_fct(
         self,
@@ -157,24 +157,33 @@ class Voids:
             else:
                 lower_bound = min(limits[idx])
                 upper_bound = max(limits[idx])
-            print("------------------------------------", len(rad_deg), lower_bound, upper_bound)
+            print(
+                "------------------------------------",
+                len(rad_deg),
+                lower_bound,
+                upper_bound,
+            )
 
             bins = np.arange(
-                lower_bound, upper_bound, (upper_bound - lower_bound) / nbins,
+                lower_bound, upper_bound, (upper_bound - lower_bound) / nbins
             )
 
             _hist, _rad = np.histogram(
-                self.data["rad_deg"].values, bins=bins, range=limits, density=False,
+                self.data["rad_deg"].values,
+                bins=bins,
+                range=limits,
+                density=False,
             )
             _hist = np.cumsum(_hist[::-1])[::-1]
             _rad = (_rad[1:] + _rad[:-1]) / 2.0
             void_counts_dic = {"rad": _rad, "counts": _hist}
             void_counts_df = pd.DataFrame(data=void_counts_dic)
-            
+
             if save:
-                filename = f"tunnel_void_counts_zrange_0.08_0.90_{mapp}_nu{int(nu)}.h5"
+                filename = (
+                    f"tunnel_void_counts_zrange_0.08_0.90_{mapp}_nu{int(nu)}.h5"
+                )
                 IO.save_dataFrame(dir_out, filename, void_counts_df)
-        
 
     def get_profiles(
         self,
@@ -214,25 +223,30 @@ class Voids:
 
         if self.finder_spec["name"] in ["tunnels", "wvf"]:
             self.data = self._trim_edges(
-                self.data, radii_max, self.skymap_dsc["npix"],
+                self.data, radii_max, self.skymap_dsc["npix"]
             )
             self.data = self.data.reset_index()
         # only resolved voids
-        self.data = self.data[radii_max*self.data["rad_pix"] > void_resolution]
+        self.data = self.data[
+            radii_max * self.data["rad_pix"] > void_resolution
+        ]
         self.data = self.data.reset_index()
         print(
             f"Get the profile of {len(self.data.index)} "
             + f"{self.finder_spec['name']} voids"
         )
         self.profiles = Profiles2D.from_map(
-            self.data, _skymap, radii_max, nr_rad_bins,
+            self.data, _skymap, radii_max, nr_rad_bins
         )
         if save:
-            dir_out = '/'.join(self.dataset_file.split("/")[:-1])
+            dir_out = "/".join(self.dataset_file.split("/")[:-1])
             if self.field_conversion is None:
-                self.field_conversion = ''
-            filename = self.field_conversion + '_' + \
-                ''.join(self.dataset_file.split("/")[-1].split(".")[:-1])
+                self.field_conversion = ""
+            filename = (
+                self.field_conversion
+                + "_"
+                + "".join(self.dataset_file.split("/")[-1].split(".")[:-1])
+            )
             filename = f"{dir_out}/signle_profiles_{filename}.h5"
             print(f"Save profiles in -> {filename}")
             df = pd.DataFrame(
@@ -240,7 +254,7 @@ class Voids:
                 index=self.profiles["radii"],
                 columns=self.data.index.values,
             )
-            df.to_hdf(filename, key='df', mode='w')
+            df.to_hdf(filename, key="df", mode="w")
 
     def get_profile_stats(
         self,
@@ -258,11 +272,16 @@ class Voids:
         """
         if field_conversion:
             self.field_conversion = field_conversion
-        
+
         if cats:
             # initialize result arrays
-            cat_per_cats = [len(np.unique(self.data[cat].values)) for cat in cats]
-            cats_dict = {cat:np.unique(self.data[cat].values) for idx, cat in enumerate(cats)}
+            cat_per_cats = [
+                len(np.unique(self.data[cat].values)) for cat in cats
+            ]
+            cats_dict = {
+                cat: np.unique(self.data[cat].values)
+                for idx, cat in enumerate(cats)
+            }
             nr_rad_bins = len(self.profiles["radii"])
             _mean = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
             _low_err = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
@@ -271,7 +290,7 @@ class Voids:
             _obj_size_max = np.zeros(tuple(cat_per_cats))
             _obj_in_cat = np.zeros(tuple(cat_per_cats))
 
-            #TODO create dynamic for-loops via recursion
+            # TODO create dynamic for-loops via recursion
             for ss, sigma in enumerate(cats_dict["sigma"]):
                 # filter voids
                 _void_in_cat = self.data.loc[self.data["sigma"] == sigma]
@@ -286,9 +305,9 @@ class Voids:
                     self.profiles["radii"].max(),
                     len(self.profiles["radii"]),
                 )
-                if self.field_conversion == 'tangential_shear':
+                if self.field_conversion == "tangential_shear":
                     _mean[ss, :] = self._compute_tangential_shear(
-                        self.profiles["radii"], _mean[ss, :],
+                        self.profiles["radii"], _mean[ss, :]
                     )
                 # apply bootstrap to get errors
                 error = Profiles2D.bootstrapping(
@@ -303,7 +322,7 @@ class Voids:
                 _high_err[ss, :] = error[1, :]
 
                 # min. & max. void size in bin
-                #(* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
+                # (* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
                 _obj_size_min[ss] = _void_in_cat["rad_deg"].min()
                 _obj_size_max[ss] = _void_in_cat["rad_deg"].max()
                 _obj_in_cat[ss] = len(_void_in_cat.index)
@@ -331,7 +350,7 @@ class Voids:
             _obj_size_max = np.zeros(1)
             _obj_in_cat = np.zeros(1)
 
-            #TODO create dynamic for-loops via recursion
+            # TODO create dynamic for-loops via recursion
             # filter voids
             _void_in_cat = self.data
             # clean-up and averaging profiles
@@ -341,9 +360,9 @@ class Voids:
                 self.profiles["radii"].max(),
                 len(self.profiles["radii"]),
             )
-            if self.field_conversion == 'tangential_shear':
+            if self.field_conversion == "tangential_shear":
                 _mean[:] = self._compute_tangential_shear(
-                    self.profiles["radii"], _mean[:],
+                    self.profiles["radii"], _mean[:]
                 )
             # apply bootstrap to get errors
             error = Profiles2D.bootstrapping(
@@ -358,11 +377,11 @@ class Voids:
             _high_err[:] = error[1, :]
 
             # min. & max. void size in bin
-            #(* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
+            # (* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
             _obj_size_min[0] = _void_in_cat["rad_deg"].min()
             _obj_size_max[0] = _void_in_cat["rad_deg"].max()
             _obj_in_cat[0] = len(_void_in_cat.index)
-            
+
             ds = xr.Dataset(
                 {
                     "mean": (["radius"], _mean),
@@ -378,11 +397,14 @@ class Voids:
             )
 
         if save:
-            dir_out = '/'.join(self.dataset_file.split("/")[:-1])
+            dir_out = "/".join(self.dataset_file.split("/")[:-1])
             if self.field_conversion is None:
-                self.field_conversion = ''
-            filename = self.field_conversion + '_' + \
-                ''.join(self.dataset_file.split("/")[-1].split(".")[:-1])
+                self.field_conversion = ""
+            filename = (
+                self.field_conversion
+                + "_"
+                + "".join(self.dataset_file.split("/")[-1].split(".")[:-1])
+            )
             filename = f"{dir_out}/profile_{filename}.nc"
             print(f"Save profile statistics in -> {filename}")
             ds.to_netcdf(filename)
@@ -398,7 +420,7 @@ class Voids:
             npix: Nr. of pixels on edge of SkyMap
         """
         return object_selection.trim_dataframe_of_objects_crossing_edge(
-            voids, radii_max, npix,
+            voids, radii_max, npix
         )
 
     def filter_snapshot(self, ray_nr: int) -> None:
@@ -450,15 +472,13 @@ class Voids:
             self.data = object_selection.minimal_voids(
                 self.data, tracers.data, args
             )
-            
+
     def categorize_type(self):
         """ Categorize voids into [minimal, ..., ...] """
         # TODO
         raise VoidsWarning("Not implemented yet")
 
-    def categorize_sizes(
-        self, bins: int, min_obj_nr: int
-    ) -> tuple:
+    def categorize_sizes(self, bins: int, min_obj_nr: int) -> tuple:
         """
         Group objects according to their size.
 
@@ -473,21 +493,22 @@ class Voids:
         )
 
     def _compute_tangential_shear(
-        self, rad: np.array, prof: np.array,
+        self, rad: np.array, prof: np.array
     ) -> np.array:
         """
         Compute the tangential shear profile for a given convergence profile.
 
         Args:
         """
+
         def _integrand(r):
             return 2 * np.pi * r * kappa_r(r)
 
-        kappa_r = interp1d(rad, prof, fill_value='extrapolate')
+        kappa_r = interp1d(rad, prof, fill_value="extrapolate")
         shear = np.zeros(len(rad))
         for l in range(len(rad)):
-            _val = integrate.quad(_integrand, 0, rad[l])[0] 
-            shear[l] = _val / (np.pi * rad[l]**2) - prof[l]
+            _val = integrate.quad(_integrand, 0, rad[l])[0]
+            shear[l] = _val / (np.pi * rad[l] ** 2) - prof[l]
         return shear
 
 

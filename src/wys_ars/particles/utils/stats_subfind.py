@@ -163,10 +163,8 @@ class SubFind:
         Comput the real space two point correlation function using halotools
 
         Args:
-            data:
-                3D array with the cartesian coordiantes of the tracers.
-            boxsize:
-                box size of the simulation in the same units as positions.
+            data: 3D array with the cartesian coordiantes of the tracers.
+            boxsize: box size of the simulation in the same units as positions.
         """
         if boxsize is None:
             boxsize = snapshot.header.boxsize / 1e3  # [Mpc/h]
@@ -196,12 +194,10 @@ class SubFind:
             elif seperate["compare"][1] == 2:
                 idx2 = snapshot.cat[split_quantity][:] > 10 ** seperate[split_quantity]
 
-
         print(
             f"Group one has {len(np.arange(len(idx1))[idx1])} halos and "
             + f"Group two has {len(np.arange(len(idx2))[idx2])} halos"
         )
-
 
         pos1 = snapshot.cat["GroupPos"][idx1, :] * snapshot.header.hubble / 1e3  # [Mpc/h]
         vel1 = snapshot.cat["GroupVel"][idx1, :]  # [km/sec]

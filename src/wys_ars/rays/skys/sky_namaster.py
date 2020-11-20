@@ -22,6 +22,7 @@ from wys_ars.io import IO
 dir_src = Path(__file__).parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
 
+
 class SkyNamasterWarning(BaseException):
     pass
 
@@ -40,6 +41,7 @@ class SkyNamaster:
 
     Methods:
     """
+
     def __init__(
         self,
         skyfield: np.ndarray,
@@ -77,13 +79,13 @@ class SkyNamaster:
                 Dictionary pointing to a file via {path, root, extension}.
                 Use when multiple skymaps need to be loaded.
         """
-        assert map_file, SkyNamasterWarning('There is no file being pointed at')
+        assert map_file, SkyNamasterWarning("There is no file being pointed at")
 
         file_extension = map_file.split(".")[-1]
         if file_extension == "h5":
             map_df = pd.read_hdf(map_file, key="df")
             return cls.from_dataframe(
-                map_df, opening_angle, quantity, dir_in, map_file, convert_unit,
+                map_df, opening_angle, quantity, dir_in, map_file, convert_unit
             )
         elif file_extension == "fits":
             map_array = hp.read_map(map_file)
@@ -95,7 +97,7 @@ class SkyNamaster:
             return cls.from_array(
                 map_array, opening_angle, quantity, dir_in, map_file
             )
-    
+
     @classmethod
     def from_dataframe(
         cls,
@@ -118,11 +120,13 @@ class SkyNamaster:
         """
         if convert_unit:
             map_df = SkyUtils.convert_code_to_phy_units(quantity, map_df)
-        map_array = SkyIO.transform_PandasSeries_to_NumpyNdarray(map_df[quantity])
-        return cls.from_array(
-            map_array, opening_angle, quantity, dir_in, map_file,
+        map_array = SkyIO.transform_PandasSeries_to_NumpyNdarray(
+            map_df[quantity]
         )
-    
+        return cls.from_array(
+            map_array, opening_angle, quantity, dir_in, map_file
+        )
+
     @classmethod
     def from_array(
         cls,
@@ -158,13 +162,13 @@ class SkyNamaster:
         of: Optional[str] = None,
         img: Optional[np.ndarray] = None,
         rtn: bool = False,
-    ) -> Union[np.ndarray, None]:    
+    ) -> Union[np.ndarray, None]:
         if of:
             img = copy.deepcopy(self.data[of])
-        img = transform.resize(image, (npix, npix), anti_aliasing=True,)
-        if rtn:                                          
-            return img                                   
-        else:                                            
+        img = transform.resize(image, (npix, npix), anti_aliasing=True)
+        if rtn:
+            return img
+        else:
             self.data[of] = img
 
     def create_cmb(
@@ -197,7 +201,7 @@ class SkyNamaster:
 
     def sum_of_maps(self, map1: str, map2: str) -> None:
         self.data[f"{map1}_{map2}"] = self.data[map1] + self.data[map2]
-    
+
     def add_mask(
         self,
         on: str,
@@ -208,4 +212,3 @@ class SkyNamaster:
             self.create_mask(theta, nside)
         self.data[on] = hp.ma(self.data[on])
         self.data[on].mask = self.data["mask"]
-

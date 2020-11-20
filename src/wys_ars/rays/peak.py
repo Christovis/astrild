@@ -15,6 +15,7 @@ from wys_ars.simulation import Simulation
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.profiles import profile_2d as Profiles2D
 
+
 class PeaksWarning(BaseException):
     pass
 
@@ -91,7 +92,6 @@ class Peaks:
             ]  # dict-key comes from lenstools.ConvergenceMap
         return skymap
 
-
     def get_profiles(
         self,
         radii_max: float,
@@ -129,7 +129,7 @@ class Peaks:
 
         if self.finder_spec["name"] == "tunnels":
             self.data = self._trim_edges(
-                self.data, radii_max, self.skymap_dsc["npix"],
+                self.data, radii_max, self.skymap_dsc["npix"]
             )
             self.data = self.data.reset_index()
         print(
@@ -137,7 +137,7 @@ class Peaks:
             + f"{self.finder_spec['name']} voids"
         )
         self.profiles = Profiles2D.from_map(
-            self.data, _skymap, radii_max, nr_rad_bins, field_conversion,
+            self.data, _skymap, radii_max, nr_rad_bins, field_conversion
         )
 
     def get_profile_stats(
@@ -154,16 +154,21 @@ class Peaks:
             cats:
                 What categorizations to use.
         """
-        if (field_conversion is not None and
-            self.field_conversion is not None and
-            field_conversion != self.field_conversion):
+        if (
+            field_conversion is not None
+            and self.field_conversion is not None
+            and field_conversion != self.field_conversion
+        ):
             raise VoidsWarning("Contradictory field convergence")
         elif field_conversion is not None:
             self.field_conversion = field_conversion
-        
+
         # initialize result arrays
         cat_per_cats = [len(np.unique(self.data[cat].values)) for cat in cats]
-        cats_dict = {cat:np.unique(self.data[cat].values) for idx, cat in enumerate(cats)}
+        cats_dict = {
+            cat: np.unique(self.data[cat].values)
+            for idx, cat in enumerate(cats)
+        }
         nr_rad_bins = len(self.profiles["radii"])
         _mean = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
         _low_err = np.zeros(tuple(cat_per_cats + [nr_rad_bins]))
@@ -172,7 +177,7 @@ class Peaks:
         _obj_size_max = np.zeros(tuple(cat_per_cats))
         _obj_in_cat = np.zeros(tuple(cat_per_cats))
 
-        #TODO create dynamic for-loops via recursion
+        # TODO create dynamic for-loops via recursion
         for ss, sigma in enumerate(cats_dict["sigma"]):
             # filter voids
             _void_in_cat = self.data.loc[self.data["sigma"] == sigma]
@@ -183,9 +188,9 @@ class Peaks:
                 self.profiles["radii"].max(),
                 len(self.profiles["radii"]),
             )
-            if self.field_conversion == 'tangential_shear':
+            if self.field_conversion == "tangential_shear":
                 _mean[ss, :] = self._compute_tangential_shear(
-                    self.profiles["radii"], _mean[ss, :],
+                    self.profiles["radii"], _mean[ss, :]
                 )
             # apply bootstrap to get errors
             error = Profiles2D.bootstrapping(
@@ -200,7 +205,7 @@ class Peaks:
             _high_err[ss, :] = error[1, :]
 
             # min. & max. void size in bin
-            #(* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
+            # (* 3600 * u.arcsec * object_dist).to(u.Mpc, u.dimensionless_angles()) / u.Mpc
             _obj_size_min[ss] = _void_in_cat["rad_deg"].min()
             _obj_size_max[ss] = _void_in_cat["rad_deg"].max()
             _obj_in_cat[ss] = len(_void_in_cat.index)
@@ -220,12 +225,17 @@ class Peaks:
             },
         )
         if save:
-            dir_out = '/'.join(self.dataset_file.split("/")[:-1])
+            dir_out = "/".join(self.dataset_file.split("/")[:-1])
             if self.field_conversion is None:
-                self.field_conversion = ''
-            file_name = self.field_conversion + '_' + \
-                ''.join(self.dataset_file.split("/")[-1].split(".")[:-1])
-            print(f"Save profile statistics in -> {dir_out}/profile_{file_name}.nc")
+                self.field_conversion = ""
+            file_name = (
+                self.field_conversion
+                + "_"
+                + "".join(self.dataset_file.split("/")[-1].split(".")[:-1])
+            )
+            print(
+                f"Save profile statistics in -> {dir_out}/profile_{file_name}.nc"
+            )
             ds.to_netcdf(f"{dir_out}/profile_{file_name}.nc")
 
     def _trim_edges(
@@ -241,7 +251,6 @@ class Peaks:
         """
         return object_selection.trim_edges(voids, radii_max, npix)
 
-
     def filter_sigma(self, sigma: float) -> None:
         """ """
         if hasattr(self, "filtered"):
@@ -251,9 +260,7 @@ class Peaks:
             if self.finder is "tunnels":
                 self.filtered = self.data[self.data["sigma"] == sigma]
 
-    def categorize_sizes(
-        self, bins: int, min_obj_nr: int
-    ) -> tuple:
+    def categorize_sizes(self, bins: int, min_obj_nr: int) -> tuple:
         """
         Group objects according to their size.
 
@@ -267,9 +274,7 @@ class Peaks:
             self.data, "log", bins, min_obj_nr
         )
 
-    def categorize_sizes(
-        self, bins: int, min_obj_nr: int
-    ) -> tuple:
+    def categorize_sizes(self, bins: int, min_obj_nr: int) -> tuple:
         """
         Group objects according to their size.
 
@@ -298,11 +303,9 @@ class Peaks:
             else:
                 voids.filtered = self.data[self.data["radius_bin"] == size_bin]
 
+
 def set_radii(
-    peaks: pd.DataFrame,
-    voids: pd.DataFrame,
-    npix,
-    opening_angle,
+    peaks: pd.DataFrame, voids: pd.DataFrame, npix, opening_angle
 ) -> pd.DataFrame:
     """
     Args:
@@ -336,11 +339,10 @@ def set_radii(
 
     peaks["rad_deg"] = pd.Series(distances)
     peaks["rad_pix"] = peaks["rad_deg"].apply(
-        lambda x: np.rint(x * (
-            npix / opening_angle
-        )).astype(int)
+        lambda x: np.rint(x * (npix / opening_angle)).astype(int)
     )
     return peaks
+
 
 def load_txt_add_pix(fname, args):
     """
@@ -350,7 +352,9 @@ def load_txt_add_pix(fname, args):
     Returns:
         peaks : pd.DataFrame
     """
-    peaks = pd.read_csv(fname, delim_whitespace=True, names=["x_deg", "y_deg", "nu"])
+    peaks = pd.read_csv(
+        fname, delim_whitespace=True, names=["x_deg", "y_deg", "nu"]
+    )
 
     peaks["x_pix"] = peaks["x_deg"].apply(
         lambda x: np.rint(x * (args["Npix"] / args["field_width"])).astype(int)

@@ -288,7 +288,9 @@ class DensityHeader:
             print("  indexDensityFile= ", self.indexDensityFile)
         print("  box coordinates = ", self.box)
 
-        print("\n2) Information about the Gadget snapshot used to compute the density:")
+        print(
+            "\n2) Information about the Gadget snapshot used to compute the density:"
+        )
         print("  npartTotal   = ", self.npartTotal)
         print("  mass         = ", self.mass)
         print("  time         = ", self.time)
@@ -333,7 +335,10 @@ def readDensityHeader(file, VERBOSE=True):
                 % (file, tempName)
             )
     if VERBOSE:
-        print("Reading the header of the density file '%s' ... " % tempName, end=" ")
+        print(
+            "Reading the header of the density file '%s' ... " % tempName,
+            end=" ",
+        )
     f = open(tempName, "rb")
     header.fromfile(f)
     if VERBOSE:
@@ -388,12 +393,17 @@ def readDensityData(
         )
         if wrongFileLabel:
             dataComponents = np.int(
-                numDataBytes * 1.0 / header.totalGrid / np.array([1], dataType).nbytes
+                numDataBytes
+                * 1.0
+                / header.totalGrid
+                / np.array([1], dataType).nbytes
             )
             print(dataComponents)
             if (
                 numDataBytes
-                != dataComponents * header.totalGrid * np.array([1], dataType).nbytes
+                != dataComponents
+                * header.totalGrid
+                * np.array([1], dataType).nbytes
             ):
                 throwError(
                     "Cannot estimate what is the data format and size of the data array. Please supply these values as input to the read in function via the parameters 'dataType'."

@@ -4,7 +4,13 @@ from wys_ars.rays.voids.tunnels.miscellaneous import throwError, throwWarning
 
 
 def readTextFile(
-    file, noDescriptionLines, noRows, noColumns, dataType, delimiter=" ", VERBOSE=True
+    file,
+    noDescriptionLines,
+    noRows,
+    noColumns,
+    dataType,
+    delimiter=" ",
+    VERBOSE=True,
 ):
     """ 
     Used to read data from a text file.
@@ -47,7 +53,9 @@ def writeTextFile(file, description=None, data=None, VERBOSE=True):
     f.close()
 
 
-def getTextFileProperties(filename, descriptionChar="#", delimiter=" ", VERBOSE=True):
+def getTextFileProperties(
+    filename, descriptionChar="#", delimiter=" ", VERBOSE=True
+):
     """ Counts the number of description lines, columns and rows in a text file. """
     noDescLines, noColumns, noRows = 0, 0, 1
     if delimiter == " ":

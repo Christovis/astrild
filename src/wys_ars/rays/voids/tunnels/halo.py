@@ -204,13 +204,15 @@ class HaloHeader:
         print("\tInteger data columns:")
         for i in range(self.columnNamesIntegers.shape[0]):
             print(
-                "   %s" % ("%i= %s" % (i, charToString(self.columnNamesIntegers[i]))),
+                "   %s"
+                % ("%i= %s" % (i, charToString(self.columnNamesIntegers[i]))),
                 # end=" ",
             )
         print("\n\tFloating data columns:")
         for i in range(self.columnNamesFloats.shape[0]):
             print(
-                "   %s" % ("%i= %s" % (i, charToString(self.columnNamesFloats[i]))),
+                "   %s"
+                % ("%i= %s" % (i, charToString(self.columnNamesFloats[i]))),
                 # end=" ",
             )
         print()
@@ -238,9 +240,9 @@ class HaloHeader:
         """Reads the column names (16 chars for each column) from a binary halo file. """
         if BUFFER:
             __buffer1 = np.fromfile(f, HaloHeader.bufferType, 1)[0]
-        A = np.fromfile(f, "c", self.noColumns * HaloHeader.columnNameLength).reshape(
-            -1, HaloHeader.columnNameLength
-        )
+        A = np.fromfile(
+            f, "c", self.noColumns * HaloHeader.columnNameLength
+        ).reshape(-1, HaloHeader.columnNameLength)
         if BUFFER:
             __buffer2 = np.fromfile(f, HaloHeader.bufferType, 1)[0]
             if (
@@ -261,7 +263,10 @@ class HaloHeader:
     def WriteColumnNames(self, f, BUFFER=True):
         """Writes the column names (16 chars for each column) in a binary halo file. """
         __A = np.hstack(
-            (self.columnNamesIntegers.flatten(), self.columnNamesFloats.flatten())
+            (
+                self.columnNamesIntegers.flatten(),
+                self.columnNamesFloats.flatten(),
+            )
         )
         __buffer = np.array([__A.nbytes], dtype=HaloHeader.bufferType)
         if BUFFER:
@@ -291,7 +296,9 @@ class HaloHeader:
             int(len(columnName) < HaloHeader.columnNameLength)
         ]
         __A.put(list(range(__length)), columnName)
-        self.columnNamesIntegers = np.vstack((self.columnNamesIntegers, __A)).copy()
+        self.columnNamesIntegers = np.vstack(
+            (self.columnNamesIntegers, __A)
+        ).copy()
         self.noColumnsIntegers += 1
         self.noColumns += 1
 
@@ -349,9 +356,13 @@ class HaloHeader:
         """
         intCols, floatCols = [], []
         for i in range(self.columnNamesIntegers.shape[0]):
-            intCols.append(self.columnNamesIntegers[i].tostring().rstrip("\x00"))
+            intCols.append(
+                self.columnNamesIntegers[i].tostring().rstrip("\x00")
+            )
         for i in range(self.columnNamesFloats.shape[0]):
-            floatCols.append(self.columnNamesFloats[i].tostring().rstrip("\x00"))
+            floatCols.append(
+                self.columnNamesFloats[i].tostring().rstrip("\x00")
+            )
 
         search = columnName[: HaloHeader.columnNameLength]
         if search in intCols:
@@ -409,7 +420,12 @@ def readHaloData(fileName, VERBOSE=True):
     if __buffer1 != __buffer2:
         throwError(
             "While reading the integer data block in halo file '%s'. The buffer preceding and the buffer after the data do not have the same value (buffer1 = %s, buffer2 = %s while the expected value was %s)."
-            % (fileName, __buffer1, __buffer2, dataSize * dataIntegers[0].nbytes)
+            % (
+                fileName,
+                __buffer1,
+                __buffer2,
+                dataSize * dataIntegers[0].nbytes,
+            )
         )
 
     # read the floating point data
@@ -422,7 +438,12 @@ def readHaloData(fileName, VERBOSE=True):
     if __buffer1 != __buffer2:
         throwError(
             "While reading the floating point data block in halo file '%s'. The buffer preceding and the buffer after the data do not have the same value (buffer1 = %s, buffer2 = %s while the expected value was %s)."
-            % (fileName, __buffer1, __buffer2, dataSize * dataIntegers[0].nbytes)
+            % (
+                fileName,
+                __buffer1,
+                __buffer2,
+                dataSize * dataIntegers[0].nbytes,
+            )
         )
 
     # return the results
@@ -501,7 +522,8 @@ def getColumnNames(names, reshuffle=None):
         return result
     else:
         res = np.zeros(
-            (len(list(reshuffle.values())), HaloHeader.columnNameLength), dtype="c"
+            (len(list(reshuffle.values())), HaloHeader.columnNameLength),
+            dtype="c",
         )
         res[list(reshuffle.values()), :] = result[list(reshuffle.keys()), :]
         return res
@@ -755,7 +777,10 @@ def computeStatistics(data, massBins, massBinValues, noBootstrapSamples=100):
             averages[i - 1, 6 * j + 2 : 6 * j + 4] = analysis.Median(
                 data[selection, j + 1], noBootstrapSamples
             )
-            averages[i - 1, 6 * j + 4 : 6 * j + 6] = percentile[0][0], percentile[1][0]
+            averages[i - 1, 6 * j + 4 : 6 * j + 6] = (
+                percentile[0][0],
+                percentile[1][0],
+            )
             averages[i - 1, 6 * j + 6 : 6 * j + 8] = analysis.Average(
                 data[selection, j + 1], noBootstrapSamples
             )

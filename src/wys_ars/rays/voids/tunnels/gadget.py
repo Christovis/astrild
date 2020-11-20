@@ -1,6 +1,10 @@
 import os.path
 import numpy as np
-from wys_ars.rays.voids.tunnels.miscellaneous import throwError, throwWarning, charToString
+from wys_ars.rays.voids.tunnels.miscellaneous import (
+    throwError,
+    throwWarning,
+    charToString,
+)
 
 
 GadgetFileType = {1: "Gadget1", 2: "Gadget2", 3: "HDF5", -1: "Unknown"}
@@ -120,7 +124,9 @@ class GadgetParticles:
         if self.noParticles == 0:
             self.noParticles = numberPart
 
-    def CheckDataCompletness(self, HEADER=True, POS=True, VEL=True, ID=True, MASS=True):
+    def CheckDataCompletness(
+        self, HEADER=True, POS=True, VEL=True, ID=True, MASS=True
+    ):
         completness = True
         if HEADER and not self.hasHeader:
             throwWarning(
@@ -152,7 +158,9 @@ class GadgetParticles:
     def SameNumberOfParticles(self, POS=True, VEL=True, ID=True, MASS=True):
         noParticles = 0
         sameNumber = True
-        self.CheckDataCompletness(HEADER=False, POS=POS, VEL=VEL, ID=ID, MASS=MASS)
+        self.CheckDataCompletness(
+            HEADER=False, POS=POS, VEL=VEL, ID=ID, MASS=MASS
+        )
         if POS and self.hasPos:
             if noParticles == 0:
                 noParticles = self.Pos().size / 3
@@ -285,7 +293,9 @@ class GadgetHeader:
     def Tuple(self):
         return eval(self.TupleAsString())
 
-    def fromfile(self, f, BUFFER=True, bufferType=np.dtype("i4"), switchEndian=False):
+    def fromfile(
+        self, f, BUFFER=True, bufferType=np.dtype("i4"), switchEndian=False
+    ):
         if BUFFER:
             __buffer1 = np.fromfile(f, bufferType, 1)[0]
         A = np.fromfile(f, self.dtype(), 1)[0]
@@ -357,13 +367,19 @@ class GadgetHeader:
                 % self.BoxSize,
             ),
             ("Omega0", "=%f - the matter density" % self.Omega0),
-            ("OmegaLambda", "=%f - the Lambda energy density" % self.OmegaLambda),
+            (
+                "OmegaLambda",
+                "=%f - the Lambda energy density" % self.OmegaLambda,
+            ),
             (
                 "HubbleParam",
                 "=%f - Hubble parameter 'h' where the Hubble constant H=100 km/s h"
                 % self.HubbleParam,
             ),
-            ("gadgetFill", "='%s' - additional information" % charToString(self.fill)),
+            (
+                "gadgetFill",
+                "='%s' - additional information" % charToString(self.fill),
+            ),
         ]
         return __description
 
@@ -497,7 +513,16 @@ def gadgetDataType(
             print("  mass <-> ", massType)
         else:
             print("")
-    return posType, posSize, velType, velSize, idType, idSize, massType, massSize
+    return (
+        posType,
+        posSize,
+        velType,
+        velSize,
+        idType,
+        idSize,
+        massType,
+        massSize,
+    )
 
 
 def readGadgetHeader(file, INDEX=0, VERBOSE=True):
@@ -526,14 +551,24 @@ def readGadgetHeader(file, INDEX=0, VERBOSE=True):
 
 
 def readGadgetData(
-    file, HEADER=True, POS=True, VEL=True, ID=True, MASS=True, VERBOSE=True, NO_FILES=-1
+    file,
+    HEADER=True,
+    POS=True,
+    VEL=True,
+    ID=True,
+    MASS=True,
+    VERBOSE=True,
+    NO_FILES=-1,
 ):
     """ Reads the header and data in a Gadget snapshot (single or multiple files).
     It returns the class 'GadgetParticles' which keeps track of the gadget header (class 'GadgetHeader' - if HEADER=True) and the data in numpy array/arrays (depending on what data to read).
     Can choose what options to choose via the boolean parameters (default ALL True): HEADER = True/False; POS; VEL; ID; MASS;
     Can use VERBOSE = False to turn off the messages."""
     if VERBOSE:
-        print("\nReading the data in the Gadget snapshot file/s '%s' ... " % (file))
+        print(
+            "\nReading the data in the Gadget snapshot file/s '%s' ... "
+            % (file)
+        )
         print("This functions reads only particle type 1 data!")
 
     # Gadget snapshot file variables
@@ -567,9 +602,9 @@ def readGadgetData(
                 )
 
     # variables where to store the data
-    noTotParticles = gadgetTotalParticleCount(file, header.num_files, VERBOSE=VERBOSE)[
-        1
-    ]
+    noTotParticles = gadgetTotalParticleCount(
+        file, header.num_files, VERBOSE=VERBOSE
+    )[1]
     hasMass = False
     if header.mass[1] == np.float64(0.0):
         hasMass = True
@@ -798,7 +833,8 @@ def boxFullyContained(mainBox, smallBox):
     """Checks if the 'smallBox' is fully contained inside 'mainBox'."""
     for i in range(3):
         if not (
-            smallBox[2 * i] >= mainBox[2 * i] and smallBox[2 * i] <= mainBox[2 * i + 1]
+            smallBox[2 * i] >= mainBox[2 * i]
+            and smallBox[2 * i] <= mainBox[2 * i + 1]
         ):
             return False
         if not (
@@ -817,7 +853,9 @@ def boxOverlap(box1, box2):
     return True
 
 
-def selectParticlesInBox(particles, box, periodicLength, periodic=True, VERBOSE=True):
+def selectParticlesInBox(
+    particles, box, periodicLength, periodic=True, VERBOSE=True
+):
     """Selects only the particle positions in the box of interest. It uses periodic boundary conditions to translate the box to outside its regions if the region of interest is partially outside the periodic box."""
     if VERBOSE:
         print("\nFinding the particles in the subBox %s ..." % str(box))
@@ -913,10 +951,14 @@ def selectParticlesInBox(particles, box, periodicLength, periodic=True, VERBOSE=
                 result.pos[No : No + n[index], 2] = (
                     particles.pos[select[count], 2] - i3 * periodicLength
                 )
-                result.vel[No : No + n[index], :] = particles.vel[select[count], :]
+                result.vel[No : No + n[index], :] = particles.vel[
+                    select[count], :
+                ]
                 result.ids[No : No + n[index]] = particles.ids[select[count]]
                 if particles.VariableMass():
-                    result.mass[No : No + n[index]] = particles.mass[select[count]]
+                    result.mass[No : No + n[index]] = particles.mass[
+                        select[count]
+                    ]
 
                 count += 1
                 No += n[index]

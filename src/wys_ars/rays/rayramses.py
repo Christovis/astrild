@@ -57,7 +57,6 @@ class RayRamses(Simulation):
         self.npix = npix
         self.config = config
 
-
     def compress_snapshot(
         self,
         fields: list,
@@ -75,10 +74,12 @@ class RayRamses(Simulation):
         """
         self.cosmology = cosmo
 
-        self.file_nrs = self.get_file_nrs(self.file_dsc, self.dirs["sim"], "min", True,)
+        self.file_nrs = self.get_file_nrs(
+            self.file_dsc, self.dirs["sim"], "min", True
+        )
         self.files = {
             self.file_dsc["root"]: self.get_file_paths(
-                self.file_dsc, self.dirs["sim"], uniques="min",
+                self.file_dsc, self.dirs["sim"], uniques="min"
             )
         }
         # run through ray-ramses snapshots
@@ -128,7 +129,7 @@ class RayRamses(Simulation):
                     ray_collect_df = ray_collect_df.append(ray_df)
 
             ray_collect_df = ray_collect_df.sort_values(
-                by=["rayid"], axis=0, ascending=True,
+                by=["rayid"], axis=0, ascending=True
             )
             ray_collect_df = ray_collect_df.set_index("rayid")
             file_out = self.dirs["sim"] + "%s_output%05d.h5" % (
@@ -136,7 +137,6 @@ class RayRamses(Simulation):
                 ray_nr,
             )
             ray_collect_df.to_hdf(file_out, key="df", mode="w")
-
 
     def sum_snapshots(
         self,
@@ -158,7 +158,9 @@ class RayRamses(Simulation):
         """
         file_name = self.dirs["lc"] + "ray_snapshot_info.h5"
         if not os.path.isfile(file_name):
-            raise RayRamsesWarning("The file 'ray_snapshot_info.h5' does note exist")
+            raise RayRamsesWarning(
+                "The file 'ray_snapshot_info.h5' does note exist"
+            )
         self.ray_info_df = pd.read_hdf(file_name, key="s")
         sim_folder_root = self.dirs["lc"] + sim_folder_root
 
@@ -173,12 +175,17 @@ class RayRamses(Simulation):
 
             print(
                 "Box Nr. %d; %s; Redshift %.3f"
-                % (box_nr, os.path.basename(ray_file), sim_info_df["redshift"],),
+                % (box_nr, os.path.basename(ray_file), sim_info_df["redshift"]),
                 len(ray_map_df.index.values),
             )
 
-            if z_src_shift is not None and sim_info_df["redshift"] <= z_src_shift:
-                raise RayRamsesWarning("Redshift shift has not correct data structure")
+            if (
+                z_src_shift is not None
+                and sim_info_df["redshift"] <= z_src_shift
+            ):
+                raise RayRamsesWarning(
+                    "Redshift shift has not correct data structure"
+                )
                 # what snapshot to use if end of lightcone-box is reached
                 if (ray_box_info_df.name[1] == ray_nrs.min()) and (box_nr < 4):
                     z_next = self.ray_info_df.loc[(box_nr + 1, 1)]["redshift"]
@@ -207,7 +214,6 @@ class RayRamses(Simulation):
 
         self._merged_snapshots_to_file(ray_df_sum, dir_out, integration_range)
 
-
     def _get_box_and_ray_nrs(self, integration_range: dict) -> np.ndarray:
         """
         Get all box and ray-snapshot numbers for selected range.
@@ -222,7 +228,9 @@ class RayRamses(Simulation):
             elif integration_range["ray"][0] == 0:
                 print("Integrate over box", integration_range["box"])
                 self.ray_info_df = ray_info_df[
-                    ray_info_df.index.get_level_values(0).isin(integration_range["box"])
+                    ray_info_df.index.get_level_values(0).isin(
+                        integration_range["box"]
+                    )
                 ]
                 self.complete_lc = False
         else:
@@ -236,7 +244,6 @@ class RayRamses(Simulation):
             self.complete_lc = False
 
         return self.ray_info_df.index.values
-
 
     def _translate_redshift(
         self,
@@ -266,9 +273,13 @@ class RayRamses(Simulation):
         if z_far > z_src_shift:
             # if z of next snapshot larger than new source z, set the new source
             # equal to it, so that a distance of 150[Mpc/h] is maintained
-            x_src_shift = self.cosmology.comoving_distance(z_far).to_value("Mpc")
+            x_src_shift = self.cosmology.comoving_distance(z_far).to_value(
+                "Mpc"
+            )
         else:
-            x_src_shift = self.cosmology.comoving_distance(z_src_shift).to_value("Mpc")
+            x_src_shift = self.cosmology.comoving_distance(
+                z_src_shift
+            ).to_value("Mpc")
 
         x_mid = 0.5 * (x_far + x_near)
 
@@ -278,7 +289,6 @@ class RayRamses(Simulation):
             / self._kernel_function(x_mid, x_src)
         )
         return quantity_shift
-
 
     def _kernel_function(self, x: float, x_s: float) -> float:
         """
@@ -292,7 +302,6 @@ class RayRamses(Simulation):
         """
         g = (x_s - x) * x / x_s
         return g
-
 
     def _merged_snapshots_to_file(
         self, ray_df_sum: pd.DataFrame, dir_out: str, integration_range: dict
@@ -319,11 +328,18 @@ class RayRamses(Simulation):
             print("Save in %s" % fout)
             ray_df_sum.to_hdf(fout, key="df", mode="w")
 
-
     def find_halos_in_raytracing_snapshot(
-        self, halos, box_nr, snap_nr, ray_nr, boxdist, boxsize, snaplimit, hubble,
+        self,
+        halos,
+        box_nr,
+        snap_nr,
+        ray_nr,
+        boxdist,
+        boxsize,
+        snaplimit,
+        hubble,
     ) -> Union[None, pd.DataFrame]:
-        coeff = hubble/1e3
+        coeff = hubble / 1e3
         halocat = halos.get_subfind_halo_data(snap_nr=snap_nr)
         if halocat is None:
             return None
@@ -333,43 +349,58 @@ class RayRamses(Simulation):
         halocatindex = np.arange(len(halocat["Group_M_Crit200"][:]))
         # radial distance from observer [Mpc/h]
         dist = np.sqrt(
-            (halocat["GroupPos"][:, 0]*coeff - boxsize/2)**2 + \
-            (halocat["GroupPos"][:, 1]*coeff - boxsize/2)**2 + \
-            (halocat["GroupPos"][:, 2]*coeff + boxdist)**2
+            (halocat["GroupPos"][:, 0] * coeff - boxsize / 2) ** 2
+            + (halocat["GroupPos"][:, 1] * coeff - boxsize / 2) ** 2
+            + (halocat["GroupPos"][:, 2] * coeff + boxdist) ** 2
         )
         # angular
-        x_theta = np.arctan(
-            (halocat["GroupPos"][:, 0]*coeff - boxsize/2)/ \
-            (halocat["GroupPos"][:, 2]*coeff + boxdist)
-        ) * 180/np.pi
-        y_theta = np.arctan(
-            (halocat["GroupPos"][:, 1]*coeff - boxsize/2)/ \
-            (halocat["GroupPos"][:, 2]*coeff + boxdist)
-        ) * 180/np.pi
-
+        x_theta = (
+            np.arctan(
+                (halocat["GroupPos"][:, 0] * coeff - boxsize / 2)
+                / (halocat["GroupPos"][:, 2] * coeff + boxdist)
+            )
+            * 180
+            / np.pi
+        )
+        y_theta = (
+            np.arctan(
+                (halocat["GroupPos"][:, 1] * coeff - boxsize / 2)
+                / (halocat["GroupPos"][:, 2] * coeff + boxdist)
+            )
+            * 180
+            / np.pi
+        )
 
         # index of halos in light-cone
         indx = np.where(
-            (dist >= np.min(snaplimit)) &
-            (dist <= np.max(snaplimit)) &
-            (np.abs(x_theta) <= self.opening_angle/2) &
-            (np.abs(y_theta) <= self.opening_angle/2)
+            (dist >= np.min(snaplimit))
+            & (dist <= np.max(snaplimit))
+            & (np.abs(x_theta) <= self.opening_angle / 2)
+            & (np.abs(y_theta) <= self.opening_angle / 2)
         )[0]
         print(f"There are {len(indx)} halos in here")
 
         # velocity projection
-        pos_norm = np.linalg.norm(halocat["GroupPos"][indx,:], axis=1)
-        vr = np.abs(
-            (halocat["GroupVel"][indx,:]*halocat["GroupPos"][indx,:]).sum(axis=1)/\
-            pos_norm)[:, np.newaxis] * \
-            halocat["GroupPos"][indx,:]/pos_norm[:, np.newaxis]
-        vt = halocat["GroupVel"][indx,:] - vr
+        pos_norm = np.linalg.norm(halocat["GroupPos"][indx, :], axis=1)
+        vr = (
+            np.abs(
+                (
+                    halocat["GroupVel"][indx, :] * halocat["GroupPos"][indx, :]
+                ).sum(axis=1)
+                / pos_norm
+            )[:, np.newaxis]
+            * halocat["GroupPos"][indx, :]
+            / pos_norm[:, np.newaxis]
+        )
+        vt = halocat["GroupVel"][indx, :] - vr
         vel_x = vt[:, 0]
         vel_y = vt[:, 1]
 
-        r200_deg = np.arctan(
-            halocat["Group_R_Crit200"][indx] * coeff / dist[indx]
-        ) * 180/np.pi
+        r200_deg = (
+            np.arctan(halocat["Group_R_Crit200"][indx] * coeff / dist[indx])
+            * 180
+            / np.pi
+        )
 
         halo_id = [
             int(f"{box_nr}{snap_nr}{ii}")
@@ -378,27 +409,29 @@ class RayRamses(Simulation):
         halos_dict = {
             "id": halo_id,
             "dist": dist[indx],
-            "x_deg": x_theta[indx] + self.opening_angle/2,
-            "x_pix": self._degree_to_pixel(x_theta[indx] + self.opening_angle/2),
-            "y_deg": y_theta[indx] + self.opening_angle/2,
-            "y_pix": self._degree_to_pixel(y_theta[indx] + self.opening_angle/2),
+            "x_deg": x_theta[indx] + self.opening_angle / 2,
+            "x_pix": self._degree_to_pixel(
+                x_theta[indx] + self.opening_angle / 2
+            ),
+            "y_deg": y_theta[indx] + self.opening_angle / 2,
+            "y_pix": self._degree_to_pixel(
+                y_theta[indx] + self.opening_angle / 2
+            ),
             "x_vel": vel_x,
             "y_vel": vel_y,
             "m200": halocat["Group_M_Crit200"][indx],
             "r200_deg": r200_deg,
             "r200_pix": self._degree_to_pixel(r200_deg),
-            "ray_nr": [ray_nr+1] * len(indx),
+            "ray_nr": [ray_nr + 1] * len(indx),
             "snap_nr": [snap_nr] * len(indx),
         }
         halos_df = pd.DataFrame(data=halos_dict)
         return halos_df
 
-
     def _degree_to_pixel(self, deg: np.ndarray) -> np.ndarray:
         """ Convert degree to pixel position """
-        pix = np.ceil(deg * self.npix/self.opening_angle).astype(int)
+        pix = np.ceil(deg * self.npix / self.opening_angle).astype(int)
         return pix
-
 
     def find_halos_in_raytracing_box(
         self,
@@ -417,18 +450,25 @@ class RayRamses(Simulation):
         first = True
         # run through ray-ramses snapshots
         for ray_nr in np.unique(self.file_nrs)[:-1]:
-            snap_nr = ray_nr + len(halos.sim.config.index) - len(self.config.index)
-            snaplimit = (snapdist[ray_nr-1], snapdist[ray_nr])
-            
+            snap_nr = (
+                ray_nr + len(halos.sim.config.index) - len(self.config.index)
+            )
+            snaplimit = (snapdist[ray_nr - 1], snapdist[ray_nr])
+
             halos_df = self.find_halos_in_raytracing_snapshot(
-                halos, box_nr, snap_nr, ray_nr, boxdist, boxsize, snaplimit, hubble,
+                halos,
+                box_nr,
+                snap_nr,
+                ray_nr,
+                boxdist,
+                boxsize,
+                snaplimit,
+                hubble,
             )
 
             if (first is True) and (halos_df is not None):
                 halos_df_sum = halos_df
                 first = False
             elif first is False:
-                halos_df_sum = halos_df_sum.append(
-                    halos_df, ignore_index=True,
-                )
+                halos_df_sum = halos_df_sum.append(halos_df, ignore_index=True)
         return halos_df_sum

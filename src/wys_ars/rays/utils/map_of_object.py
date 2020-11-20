@@ -11,7 +11,9 @@ def timing(f):
         ret = f(*args)
         time2 = time.time()
         print(
-            "{:s} function took {:.3f} ms".format(f.__name__, (time2 - time1) * 1000.0)
+            "{:s} function took {:.3f} ms".format(
+                f.__name__, (time2 - time1) * 1000.0
+            )
         )
         return ret
 
@@ -45,14 +47,17 @@ def trim_object(objects, tile_conv, args):
         objects["pos_y"]["pix"] - args["extend"] * objects["radius"]["pix"] > 0
     )
     indx_b = np.logical_and(
-        np.logical_and(bool_3_i_x, bool_3_ii_x), np.logical_and(bool_3_i_y, bool_3_ii_y)
+        np.logical_and(bool_3_i_x, bool_3_ii_x),
+        np.logical_and(bool_3_i_y, bool_3_ii_y),
     )
     # trim = np.logical_and(trim_a,trim_b)
 
     # iterate over nested dictionary and index for all keys
     for major_key in objects.keys():
         for minor_key in objects[major_key].keys():
-            objects[major_key][minor_key] = objects[major_key][minor_key][indx_b]
+            objects[major_key][minor_key] = objects[major_key][minor_key][
+                indx_b
+            ]
     return objects
 
 
@@ -69,7 +74,9 @@ def objectmap_from_map(objects, mapp, args):
         profiles : np.array
     """
     # round up to make sure all values are included
-    object_radius_upper = np.ceil(objects["radius"]["pix"] * args["extend"]).astype(int)
+    object_radius_upper = np.ceil(
+        objects["radius"]["pix"] * args["extend"]
+    ).astype(int)
     print("max object radius in this bin:", object_radius_upper.max())
 
     objectmaps = np.zeros(
@@ -83,8 +90,12 @@ def objectmap_from_map(objects, mapp, args):
     for i in range(len(objects["radius"]["pix"])):
         # create tile of mapp around object center within its radii
         objectmap = mapp[
-            centre[0] - object_radius_upper[i] : centre[0] + object_radius_upper[i],
-            centre[1] - object_radius_upper[i] : centre[1] + object_radius_upper[i],
+            centre[0]
+            - object_radius_upper[i] : centre[0]
+            + object_radius_upper[i],
+            centre[1]
+            - object_radius_upper[i] : centre[1]
+            + object_radius_upper[i],
         ]
 
         if len(mapp_tile) < len(objectmaps[:, 0, 0]):

@@ -45,7 +45,11 @@ def MinMax(data):
     indices = _a.astype(np.uint64)
     finalShape = data.shape
     data.shape = -1
-    inline(MinMaxCode, ["data", "values", "indices"], type_converters=converters.blitz)
+    inline(
+        MinMaxCode,
+        ["data", "values", "indices"],
+        type_converters=converters.blitz,
+    )
     data.shape = finalShape
 
     # return the results
@@ -61,7 +65,9 @@ def binBoundaries(dataRange, no_bins, bin_type="linear"):
         )
     output = None
     if bin_type is "linear":
-        output = np.linspace(dataRange[0], dataRange[1], num=no_bins + 1, endpoint=True)
+        output = np.linspace(
+            dataRange[0], dataRange[1], num=no_bins + 1, endpoint=True
+        )
     if bin_type is "logarithm":
         output = np.logspace(
             np.log10(dataRange[0]),
@@ -82,14 +88,23 @@ def binValues(dataRange, no_bins, bin_type="linear"):
     binBoundary = binBoundaries(dataRange, no_bins, bin_type=bin_type)
     output = np.zeros(no_bins, binBoundary.dtype)
     if bin_type is "linear":
-        output[:] = (binBoundary[0:no_bins] + binBoundary[1 : no_bins + 1]) / 2.0
+        output[:] = (
+            binBoundary[0:no_bins] + binBoundary[1 : no_bins + 1]
+        ) / 2.0
     if bin_type is "logarithm":
-        output[:] = np.sqrt(binBoundary[0:no_bins] * binBoundary[1 : no_bins + 1])
+        output[:] = np.sqrt(
+            binBoundary[0:no_bins] * binBoundary[1 : no_bins + 1]
+        )
     return output
 
 
 def Histogram(
-    data, no_bins=100, bins=None, Range=(None, None), bin_type="linear", weights=None
+    data,
+    no_bins=100,
+    bins=None,
+    Range=(None, None),
+    bin_type="linear",
+    weights=None,
 ):
     """ This function computes the histogram of an array of data.
         no_bins = the number of bins if bins are not given in the 'bins' array
@@ -209,7 +224,9 @@ def Histogram(
             data.shape = finalShape
 
     else:
-        histData, bins = np.histogram(data, bins=bins, range=Range, weights=weights)
+        histData, bins = np.histogram(
+            data, bins=bins, range=Range, weights=weights
+        )
 
     return (histData, bins)
 
@@ -259,7 +276,9 @@ def PDF(data, pdfRange=(None, None), bin_type="linear"):
     if bin_type is "linear":
         binsSpacing[:] = (pdfRange[1] - pdfRange[0]) / bins
     elif bin_type is "logarithm":
-        binsSpacing[:] = (math.log10(pdfRange[1]) - math.log10(pdfRange[0])) / bins
+        binsSpacing[:] = (
+            math.log10(pdfRange[1]) - math.log10(pdfRange[0])
+        ) / bins
     elif bin_type is "variable":
         if pdfRange.size != data.size + 1:
             throwError(
@@ -291,7 +310,9 @@ def Median(data, N=100, minSize=5):
     """Computes the median of the data set and the errors associated to the media determination using bootstrap. It generates 'N' different bootsrap realizations."""
     funcName = "Median"
     if data.ndim != 1:
-        throwError("The '%s' functions works only for a 1D data set." % funcName)
+        throwError(
+            "The '%s' functions works only for a 1D data set." % funcName
+        )
     median = np.median(data)
     if (
         data.size < minSize
@@ -308,7 +329,9 @@ def Average(data, N=100, minSize=5):
     """Computes the average of the data set and the errors associated to the arithmetic average determination using bootstrap. It generates 'N' different bootsrap realizations."""
     funcName = "Average"
     if data.ndim != 1:
-        throwError("The '%s' functions works only for a 1D data set." % funcName)
+        throwError(
+            "The '%s' functions works only for a 1D data set." % funcName
+        )
     mean = np.mean(data)
     if (
         data.size < minSize
@@ -326,7 +349,9 @@ def Percentile(data, percentile=(25.0, 75.0), N=100):
     It returns a list of tuples, with each tupple giving the percentile value and the bootstrap error associated in determining it."""
     funcName = "Percentile"
     if data.ndim != 1:
-        throwError("The '%s' functions works only for a 1D data set." % funcName)
+        throwError(
+            "The '%s' functions works only for a 1D data set." % funcName
+        )
     result = []
     for p in percentile:
         score = stats.scoreatpercentile(data, p)
@@ -361,7 +386,9 @@ def CorrelationMatrix(data, N=100, minColumns=5):
     """Computes the correlation of the columns of the data set and the errors associated to the correlation coefficient using bootstrap. It generates 'N' different bootsrap realizations."""
     funcName = "CorrelationMatrix"
     if data.ndim != 2:
-        throwError("The '%s' functions works only for a 2D data set." % funcName)
+        throwError(
+            "The '%s' functions works only for a 2D data set." % funcName
+        )
     correlation = np.corrcoef(data, rowvar=0)
     if (
         data.shape[0] < minColumns
@@ -522,8 +549,12 @@ def LeastSquare_nonlinearFit_general(
     a = guess
     iteration, notConverged = 0, True
     while iteration < maxIteratitions and notConverged:
-        tempX = func_derv(X, a)  # the derivatives for the current parameter values
-        tempDiff = Y - func(X, a)  # the difference between function values and Y-values
+        tempX = func_derv(
+            X, a
+        )  # the derivatives for the current parameter values
+        tempDiff = Y - func(
+            X, a
+        )  # the difference between function values and Y-values
         std = (weights * tempDiff ** 2).sum()  # the current sum of the squares
         step = np.linalg.lstsq(tempX, tempDiff)[0]
         while True:
@@ -532,7 +563,9 @@ def LeastSquare_nonlinearFit_general(
                 weights * (Y - func(X, a2)) ** 2
             ).sum()  # the sum of the squares for the new parameter values
             if tempStd > std:
-                step /= 2.0  # wrong estimate for the step since it increase the deviation from Y values; decrease step by factor of 2
+                step /= (
+                    2.0
+                )  # wrong estimate for the step since it increase the deviation from Y values; decrease step by factor of 2
             else:
                 a += step
                 break
@@ -564,9 +597,19 @@ def LeastSquare_nonlinearFit_singleParameter(
     """Computes the best fit for a nonlinear function using a trivial parameter space search."""
     param, step = guess, guess
     relError, iteration = 2 * relMaxError, 0
-    pTry, error, index = np.zeros(5, X.dtype), np.zeros(5, X.dtype), np.arange(5)
+    pTry, error, index = (
+        np.zeros(5, X.dtype),
+        np.zeros(5, X.dtype),
+        np.arange(5),
+    )
     while iteration < noMaxSteps and relError > relMaxError:
-        pTry[:] = param - step, param - step / 2, param, param + step / 2, param + step
+        pTry[:] = (
+            param - step,
+            param - step / 2,
+            param,
+            param + step / 2,
+            param + step,
+        )
         for i in range(5):
             temp = Y - func(X, pTry[i])
             error[i] = (temp * temp).sum()

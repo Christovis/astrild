@@ -153,7 +153,9 @@ class DipoleFinder:
         # find peaks above sigma-limit
         values_dgd3_gauss = self.img_dgd3_gauss.flatten()
         sigma = values_dgd3_gauss / np.std(values_dgd3_gauss)
-        lower_limit = values_dgd3_gauss[sigma.max() * self.significance <= sigma].min()
+        lower_limit = values_dgd3_gauss[
+            sigma.max() * self.significance <= sigma
+        ].min()
 
         # find dipols centres
         indx = np.where(lower_limit <= self.img_dgd3_gauss)
@@ -174,11 +176,15 @@ class DipoleFinder:
 
         self.pos = {
             "pix": pos,
-            "deg": pos * self.fov / self.img_orig.shape[0],  # convert pix to deg
+            "deg": pos
+            * self.fov
+            / self.img_orig.shape[0],  # convert pix to deg
         }
         self.rad = {
             "pix": rad,
-            "deg": rad * self.fov / self.img_orig.shape[0],  # convert pix to deg
+            "deg": rad
+            * self.fov
+            / self.img_orig.shape[0],  # convert pix to deg
         }
 
     def velocity(self, deflt_x, deflt_y, area_of_integration, *argv):
@@ -242,14 +248,22 @@ class DipoleFinder:
                     img_hpf_zoom, self.kernel_width[dd], direction=thetas[ii]
                 )
                 if ii is 0:
-                    deflt_x_zoom = defltx_hpf[xaxis_min:xaxis_max, yaxis_min:yaxis_max]
+                    deflt_x_zoom = defltx_hpf[
+                        xaxis_min:xaxis_max, yaxis_min:yaxis_max
+                    ]
                     deflt_dgd3 = dgd3_filter(
-                        deflt_x_zoom, self.kernel_width[dd], direction=thetas[ii]
+                        deflt_x_zoom,
+                        self.kernel_width[dd],
+                        direction=thetas[ii],
                     )
                 else:
-                    deflt_y_zoom = deflty_hpf[xaxis_min:xaxis_max, yaxis_min:yaxis_max]
+                    deflt_y_zoom = deflty_hpf[
+                        xaxis_min:xaxis_max, yaxis_min:yaxis_max
+                    ]
                     deflt_dgd3 = dgd3_filter(
-                        deflt_y_zoom, self.kernel_width[dd], direction=thetas[ii]
+                        deflt_y_zoom,
+                        self.kernel_width[dd],
+                        direction=thetas[ii],
                     )
 
                 if area_of_integration is "gss":
@@ -279,7 +293,7 @@ class DipoleFinder:
                     )
 
                     self.vel[dd, ii] = self._magnitude(
-                        iswrs_dgd3, deflt_dgd3, centre, rad_pix, rad_deg,
+                        iswrs_dgd3, deflt_dgd3, centre, rad_pix, rad_deg
                     )
 
                 elif area_of_integration is "r200":
@@ -325,7 +339,9 @@ class DipoleFinder:
 
             return outer
 
-    def _gold_section_search(self, iswrs_dgd3, deflt_dgd3, centre, inner, outer, tol):
+    def _gold_section_search(
+        self, iswrs_dgd3, deflt_dgd3, centre, inner, outer, tol
+    ):
         """
         Perform search where magnitude of velocity vector is maximum.
         to find the minimum of f on [a,b]
@@ -375,7 +391,9 @@ class DipoleFinder:
             # If maximum is beyond maximum radii
             return -999999
         else:
-            return self._magnitude(iswrs_dgd3, deflt_dgd3, centre, (r1 + r2) / 2)
+            return self._magnitude(
+                iswrs_dgd3, deflt_dgd3, centre, (r1 + r2) / 2
+            )
 
     def _magnitude(self, iswrs_dgd3, deflt_dgd3, centre, rad_pix, rad_deg):
         """
