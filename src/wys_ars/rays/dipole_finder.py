@@ -134,13 +134,13 @@ class Dipoles:
     @classmethod
     def from_file(cls, filename_dip: str) -> "Dipoles":
         """ Create class from pd.DataFrame file """
-        peak_df = pd.read_hdf(filename_dip, key="df")
-        return cls.from_dataframe(peak_df)
+        df = pd.read_hdf(filename_dip, key="df")
+        return cls.from_dataframe(df)
 
     @classmethod
-    def from_dataframe(cls, dip_df: pd.DataFrame) -> "Dipoles":
+    def from_dataframe(cls, df: pd.DataFrame) -> "Dipoles":
         """ Create class from pd.DataFrame file """
-        return cls(dip_df)
+        return cls(df)
 
     @classmethod
     def _filter(
@@ -360,21 +360,21 @@ class Dipoles:
 
         def integration(dip: pd.Series,) -> tuple:
             # get image which will be integrated to find dipole transverse vel.
-            deltaTmap_zoom = self._get_image(
+            deltaTmap_zoom = self.get_dipole_image(
                 skyarrays["isw_rs"],
-                (dip.x_pix, dip.y_pix),
+                (dip.theta1_pix, dip.theta2_pix),
                 dip.r200_pix * extend,
                 dip.r200_deg * extend,
             )
-            alphax_zoom = self._get_image(
+            alphax_zoom = self.get_dipole_image(
                 skyarrays["alphax"],
-                (dip.x_pix, dip.y_pix),
+                (dip.theta1_pix, dip.theta2_pix),
                 dip.r200_pix * extend,
                 dip.r200_deg * extend,
             )
-            alphay_zoom = self._get_image(
+            alphay_zoom = self.get_dipole_image(
                 skyarrays["alphay"],
-                (dip.x_pix, dip.y_pix),
+                (dip.theta1_pix, dip.theta2_pix),
                 dip.r200_pix * extend,
                 dip.r200_deg * extend,
             )
@@ -406,18 +406,18 @@ class Dipoles:
        
         _array_of_failures = np.ones(len(self.data.index)) * -99999
 
-        if "x_vel" in self.data.columns.values:
-            _x_vel = self.data["x_vel"]
-            _y_vel = self.data["y_vel"]
-            del self.data[["x_vel", "y_vel"]]
+        if "theta1_mvel" in self.data.columns.values:
+            _x_vel = self.data["theta1_mvel"]
+            _y_vel = self.data["theta2_mvel"]
+            del self.data[["theta1_mvel", "theta2_mvel"]]
         else:
-            _x_vel = _array_of_failures
-            _y_vel = _array_of_failures
+            _x_vel = copy.deepcopy(_array_of_failures)
+            _y_vel = copy.deepcopy(_array_of_failures)
 
         dip_index = self._get_index_of_dip_far_from_edge(extend, skyarrays["isw_rs"].npix)
         if len(dip_index) == 0:
-            self.data["x_vel"] = _array_of_failures
-            self.data["y_vel"] = _array_of_failures
+            self.data["theta1_mvel"] = _array_of_failures
+            self.data["theta2_mvel"] = _array_of_failures
         
         else:
             self._get_cpu_nr(ncpus)
@@ -438,8 +438,8 @@ class Dipoles:
             _vt = np.asarray(_vt).T
             _x_vel[dip_index] = _vt[0]
             _y_vel[dip_index] = _vt[1]
-            self.data["x_vel"] = _x_vel
-            self.data["y_vel"] = _y_vel
+            self.data["theta1_mvel"] = _x_vel
+            self.data["theta2_mvel"] = _y_vel
 
 
     def _get_index_of_dip_far_from_edge(
@@ -456,7 +456,7 @@ class Dipoles:
 
     #@profile
     @staticmethod
-    def _get_image(
+    def get_dipole_image(
         img: Type[SkyArray], cen_pix: tuple, extend_pix: int, extend_deg: float
     ) -> Type[SkyArray]:
         xlim = np.array(

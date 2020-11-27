@@ -3,7 +3,7 @@ from typing import List, Union
 
 import numpy as np
 
-from wys_ars.particles.utils.density import readDensityData
+from wys_ars.particles.hutils.density import readDensityData
 
 dtfe_field_dimensions = {
     "density": 1,

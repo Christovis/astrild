@@ -5,11 +5,11 @@ from scipy.optimize import curve_fit, newton
 
 import pmesh
 
-from halotools.mock_observables import tpcf
-from halotools import mock_observables as mo
+#from halotools.mock_observables import tpcf
+#from halotools import mock_observables as mo
 from nbodykit.lab import *
 
-from wys_ars.utils.arepo_hdf5_library import read_hdf5
+from wys_ars.utils.arepo_hdf5_library_2020 import read_hdf5
 
 
 class SubFind:
@@ -38,73 +38,73 @@ class SubFind:
         mass_bin = (edges[1:] + edges[:-1]) / 2.0
         return mass_bin, mass_count
 
-    def tpcf_r(
-        snapshot: read_hdf5.snapshot,
-        subfind_field: str = "SubhaloPos",
-        limits: tuple = None,
-        nbins: int = None,
-        boxsize: float = None,
-    ):
-        """
-        Comput the real-space two point correlation function using halotools
+    #def tpcf_r(
+    #    snapshot: read_hdf5.snapshot,
+    #    subfind_field: str = "SubhaloPos",
+    #    limits: tuple = None,
+    #    nbins: int = None,
+    #    boxsize: float = None,
+    #):
+    #    """
+    #    Comput the real-space two point correlation function using halotools
 
-        Args:
-            data:
-                3D array with the cartesian coordiantes of the tracers.
-            boxsize:
-                box size of the simulation in the same units as positions.
-        """
-        print("-----------------------", subfind_field)
-        if boxsize is None:
-            boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
-        if limits is None:
-            limits = (0.3, boxsize / 5)
-        if nbins is None:
-            nbins = int(2 / 3 * max(limits))
+    #    Args:
+    #        data:
+    #            3D array with the cartesian coordiantes of the tracers.
+    #        boxsize:
+    #            box size of the simulation in the same units as positions.
+    #    """
+    #    print("-----------------------", subfind_field)
+    #    if boxsize is None:
+    #        boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
+    #    if limits is None:
+    #        limits = (0.3, boxsize / 5)
+    #    if nbins is None:
+    #        nbins = int(2 / 3 * max(limits))
 
-        r = np.geomspace(min(limits), max(limits), nbins)
-        r_c = 0.5 * (r[1:] + r[:-1])
-        real_tpcf = mo.tpcf(
-            snapshot.cat[subfind_field][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
-            rbins=r,  #[Mpc/h]
-            period=boxsize,
-            estimator="Landy-Szalay",
-        )
-        return r_c, real_tpcf
-    
-    def tpcf_s(
-        snapshot: read_hdf5.snapshot,
-        subfind_field: str = "GroupPos",
-        limits: tuple = None,
-        nbins: int = None,
-        boxsize: float = None,
-    ):
-        """
-        Comput the real-space two point correlation function using halotools
+    #    r = np.geomspace(min(limits), max(limits), nbins)
+    #    r_c = 0.5 * (r[1:] + r[:-1])
+    #    real_tpcf = mo.tpcf(
+    #        snapshot.cat[subfind_field][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
+    #        rbins=r,  #[Mpc/h]
+    #        period=boxsize,
+    #        estimator="Landy-Szalay",
+    #    )
+    #    return r_c, real_tpcf
+    #
+    #def tpcf_s(
+    #    snapshot: read_hdf5.snapshot,
+    #    subfind_field: str = "GroupPos",
+    #    limits: tuple = None,
+    #    nbins: int = None,
+    #    boxsize: float = None,
+    #):
+    #    """
+    #    Comput the real-space two point correlation function using halotools
 
-        Args:
-            data:
-                3D array with the cartesian coordiantes of the tracers.
-            boxsize:
-                box size of the simulation in the same units as positions.
-        """
-        print("-----------------------", subfind_field)
-        if boxsize is None:
-            boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
-        if limits is None:
-            limits = (0.3, boxsize / 5)
-        if nbins is None:
-            nbins = int(2 / 3 * max(limits))
+    #    Args:
+    #        data:
+    #            3D array with the cartesian coordiantes of the tracers.
+    #        boxsize:
+    #            box size of the simulation in the same units as positions.
+    #    """
+    #    print("-----------------------", subfind_field)
+    #    if boxsize is None:
+    #        boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
+    #    if limits is None:
+    #        limits = (0.3, boxsize / 5)
+    #    if nbins is None:
+    #        nbins = int(2 / 3 * max(limits))
 
-        r = np.geomspace(min(limits), max(limits), nbins)
-        r_c = 0.5 * (r[1:] + r[:-1])
-        real_tpcf = mo.tpcf(
-            snapshot.cat[subfind_field][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
-            rbins=r,  #[Mpc/h]
-            period=boxsize,
-            estimator="Landy-Szalay",
-        )
-        return r_c, real_tpcf
+    #    r = np.geomspace(min(limits), max(limits), nbins)
+    #    r_c = 0.5 * (r[1:] + r[:-1])
+    #    real_tpcf = mo.tpcf(
+    #        snapshot.cat[subfind_field][:] * snapshot.header.hubble / 1e3,  #[Mpc/h]
+    #        rbins=r,  #[Mpc/h]
+    #        period=boxsize,
+    #        estimator="Landy-Szalay",
+    #    )
+    #    return r_c, real_tpcf
 
     def power_spectrum(
         snapshot: read_hdf5.snapshot,
@@ -152,70 +152,70 @@ class SubFind:
         print(k, Pk)
         return k, Pk
 
-    def mean_pairwise_velocity(
-        snapshot: read_hdf5.snapshot,
-        limits: tuple,
-        nbins: int,
-        boxsize: float,
-        seperate: dict = None, #{"Group_M_Crit200": 14, "compare": [1, 2]},
-    ) -> tuple:
-        """
-        Comput the real space two point correlation function using halotools
+    #def mean_pairwise_velocity(
+    #    snapshot: read_hdf5.snapshot,
+    #    limits: tuple,
+    #    nbins: int,
+    #    boxsize: float,
+    #    seperate: dict = None, #{"Group_M_Crit200": 14, "compare": [1, 2]},
+    #) -> tuple:
+    #    """
+    #    Comput the real space two point correlation function using halotools
 
-        Args:
-            data: 3D array with the cartesian coordiantes of the tracers.
-            boxsize: box size of the simulation in the same units as positions.
-        """
-        if boxsize is None:
-            boxsize = snapshot.header.boxsize / 1e3  # [Mpc/h]
-        if limits is None:
-            limits = (0.3, boxsize / 5)
-        if nbins is None:
-            nbins = int(2 / 3 * max(limits))
+    #    Args:
+    #        data: 3D array with the cartesian coordiantes of the tracers.
+    #        boxsize: box size of the simulation in the same units as positions.
+    #    """
+    #    if boxsize is None:
+    #        boxsize = snapshot.header.boxsize / 1e3  # [Mpc/h]
+    #    if limits is None:
+    #        limits = (0.3, boxsize / 5)
+    #    if nbins is None:
+    #        nbins = int(2 / 3 * max(limits))
 
-        r = np.geomspace(min(limits), max(limits), nbins)
-        r_c = 0.5 * (r[1:] + r[:-1])
+    #    r = np.geomspace(min(limits), max(limits), nbins)
+    #    r_c = 0.5 * (r[1:] + r[:-1])
 
-        if seperate is None:
-            idx1 = np.ones(len(snapshot.cat["GroupVel"][:]), dtype=bool)
-            idx2 = np.ones(len(snapshot.cat["GroupVel"][:]), dtype=bool)
-        else:
-            split_quantity = list(seperate.keys())[0]
-            idx1 = snapshot.cat[split_quantity][:] < 10 ** seperate[split_quantity]
-            idx2 = snapshot.cat[split_quantity][:] > 10 ** seperate[split_quantity]
+    #    if seperate is None:
+    #        idx1 = np.ones(len(snapshot.cat["GroupVel"][:]), dtype=bool)
+    #        idx2 = np.ones(len(snapshot.cat["GroupVel"][:]), dtype=bool)
+    #    else:
+    #        split_quantity = list(seperate.keys())[0]
+    #        idx1 = snapshot.cat[split_quantity][:] < 10 ** seperate[split_quantity]
+    #        idx2 = snapshot.cat[split_quantity][:] > 10 ** seperate[split_quantity]
 
-            if seperate["compare"][0] == 1:
-                idx1 = snapshot.cat[split_quantity][:] < 10 ** seperate[split_quantity]
-            elif seperate["compare"][0] == 2:
-                idx1 = snapshot.cat[split_quantity][:] > 10 ** seperate[split_quantity]
-            
-            if seperate["compare"][1] == 1:
-                idx2 = snapshot.cat[split_quantity][:] < 10 ** seperate[split_quantity]
-            elif seperate["compare"][1] == 2:
-                idx2 = snapshot.cat[split_quantity][:] > 10 ** seperate[split_quantity]
+    #        if seperate["compare"][0] == 1:
+    #            idx1 = snapshot.cat[split_quantity][:] < 10 ** seperate[split_quantity]
+    #        elif seperate["compare"][0] == 2:
+    #            idx1 = snapshot.cat[split_quantity][:] > 10 ** seperate[split_quantity]
+    #        
+    #        if seperate["compare"][1] == 1:
+    #            idx2 = snapshot.cat[split_quantity][:] < 10 ** seperate[split_quantity]
+    #        elif seperate["compare"][1] == 2:
+    #            idx2 = snapshot.cat[split_quantity][:] > 10 ** seperate[split_quantity]
 
-        print(
-            f"Group one has {len(np.arange(len(idx1))[idx1])} halos and "
-            + f"Group two has {len(np.arange(len(idx2))[idx2])} halos"
-        )
+    #    print(
+    #        f"Group one has {len(np.arange(len(idx1))[idx1])} halos and "
+    #        + f"Group two has {len(np.arange(len(idx2))[idx2])} halos"
+    #    )
 
-        pos1 = snapshot.cat["GroupPos"][idx1, :] * snapshot.header.hubble / 1e3  # [Mpc/h]
-        vel1 = snapshot.cat["GroupVel"][idx1, :]  # [km/sec]
+    #    pos1 = snapshot.cat["GroupPos"][idx1, :] * snapshot.header.hubble / 1e3  # [Mpc/h]
+    #    vel1 = snapshot.cat["GroupVel"][idx1, :]  # [km/sec]
 
-        pos2 = snapshot.cat["GroupPos"][idx2, :] * snapshot.header.hubble / 1e3  # [Mpc/h]
-        vel2 = snapshot.cat["GroupVel"][idx2, :]  # [km/sec]
+    #    pos2 = snapshot.cat["GroupPos"][idx2, :] * snapshot.header.hubble / 1e3  # [Mpc/h]
+    #    vel2 = snapshot.cat["GroupVel"][idx2, :]  # [km/sec]
 
-        pv12 = mo.mean_radial_velocity_vs_r(
-            pos1,
-            vel1,
-            rbins_absolute=r_c,
-            sample2=pos2,
-            velocities2=vel2,
-            period=boxsize,
-            # do_auto=False,
-            # do_cross=True,
-        )
-        return r_c[1:], pv12  # TODO this should be
+    #    pv12 = mo.mean_radial_velocity_vs_r(
+    #        pos1,
+    #        vel1,
+    #        rbins_absolute=r_c,
+    #        sample2=pos2,
+    #        velocities2=vel2,
+    #        period=boxsize,
+    #        # do_auto=False,
+    #        # do_cross=True,
+    #    )
+    #    return r_c[1:], pv12  # TODO this should be
 
     def concentration_mass_rel(
         snapshot: read_hdf5.snapshot,

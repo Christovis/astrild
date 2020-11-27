@@ -1,20 +1,20 @@
 import os
 from gc import collect
 from pathlib import Path
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Tuple, Type, Union
 from importlib import import_module
 
 import yaml
 import numpy as np
 import pandas as pd
 
-from halotools.mock_observables import tpcf_multipole
+#from halotools.mock_observables import tpcf_multipole
 
 from wys_ars.particles.ecosmog import Ecosmog
-from wys_ars.particles.utils import SubFind
-from wys_ars.particles.utils import Rockstar
-from wys_ars.particles.utils import TPCF
-from wys_ars.utils.arepo_hdf5_library import read_hdf5
+from wys_ars.particles.hutils import SubFind
+from wys_ars.particles.hutils import Rockstar
+#from wys_ars.particles.utils import TPCF
+from wys_ars.utils.arepo_hdf5_library_2020 import read_hdf5
 from wys_ars.io import IO
 
 dir_src = Path(__file__).parent.absolute()
@@ -47,68 +47,24 @@ class Halos:
         get_rockstar_tpcf:
     """
 
-    def __init__(self, simulation: Type[Ecosmog]):
+    def __init__(
+        self,
+        halos: Union[read_hdf5.snapshot, pd.DataFrame],
+        simulation: Optional[Type[Ecosmog]] = None,
+    ):
+        self.data = halos
         self.sim = simulation
-        self.sim.type = "particles"
+        #self.sim.type = "particles"
+   
 
-
-    def get_subfind_stats(
-        self, config_file: str = default_halo_stats_config, save: bool = True,
-    ) -> None:
-        """
-        Compute statistics of halos identified with SubFind from one or a
-        collection of simulations.
-
-        Args:
-            config_file:
-                file pointer in which containes info on what statistics to
-                compute and their settings.
-            save:
-                wether to save results to file.
-        """
-        # load settings (stg)
-        with open(config_file) as f:
-            statistics = yaml.load(f, Loader=yaml.FullLoader)
-
-        for name in statistics.keys():
-            statistics[name]["results"] = {"bins": {}, "values": {}}
-        # load particles/utils/stats.py package for dynamic function call
-        module = import_module("wys_ars.particles.utils")
-
-        # sort statistics according to required halos resolutions
-        stat_names_ord = self._sort_statistics(statistics)
-
-        for snap_nr in self.sim.dir_nrs:
-            snapshot = self.get_subfind_halo_data(snap_nr)
-            if snapshot is None:
-                print(f"No sub- & halos found for snapshot {snap_nr}")
-                continue
-
-            resolution = 0
-            for stat_name in stat_names_ord:
-                if statistics[stat_name]["resolution"] != resolution:
-                    resolution = int(statistics[stat_name]["resolution"])
-                    snapshot = self.filter_resolved_subfind_halos(snapshot, resolution)
-                print(f"     Compute {stat_name}")
-                clas = getattr(module, "SubFind")
-                fct = getattr(clas, stat_name)
-                bins, values = fct(snapshot, **statistics[stat_name]["args"])
-                if (bins is not None) and (values is not None):
-                    statistics[stat_name]["results"]["bins"]["snap_%d" % snap_nr] = bins
-                    statistics[stat_name]["results"]["values"][
-                        "snap_%d" % snap_nr
-                    ] = values
-            collect()
-        if save:
-            self._save_results("subfind", statistics)
-        else:
-            self.statistics = statistics
-
-    def get_subfind_halo_data(self, snap_nr: int) -> read_hdf5.snapshot:
+    @classmethod
+    def from_subfind(
+        cls, snap_nr: int, simulation: Optional[Type[Ecosmog]] = None,
+    ) -> "Halos":
         """ """
         snapshot = read_hdf5.snapshot(
             snap_nr,
-            self.sim.dirs["sim"],
+            simulation.dirs["sim"],
             part_type_list=["dm"],
             snapbases=["/snap-groupordered_"],
             # check_total_particle_number=True,
@@ -139,7 +95,98 @@ class Halos:
                     ]
                 }
             )
-        return snapshot
+        return cls(snapshot, simulation)
+    
+
+    @classmethod
+    def from_rockstar(
+        cls, snap_nr: int, simulation: Optional[Type[Ecosmog]] = None,
+    ) -> "Halos":
+        """ """
+        # TODO: currently only one directory supported, e.g. 012
+        files_path = simulation.files["halos"][str(snap_nr)]
+        first = True
+        for file_path in files_path:
+            snapshot_part = pd.read_csv(
+                file_path, header=0, skiprows=np.arange(1, 20), delim_whitespace=True,
+            )
+
+            if first is True:
+                snapshot = snapshot_part
+                first = False
+            else:
+                snapshot = snapshot.append(snapshot_part, ignore_index=True)
+        return cls.from_dataframe(snapshot, simulation)
+    
+   
+    @classmethod
+    def from_file(
+        cls, filename: str, simulation: Optional[Type[Ecosmog]] = None,
+    ) -> "Halos":
+        """ """
+        df = pd.read_hdf(filename, key="df")
+        return cls.from_dataframe(df, simulation)
+   
+
+    @classmethod
+    def from_dataframe(
+        cls, df: pd.DataFrame, simulation: Optional[Type[Ecosmog]] = None,
+    ) -> "Halos":
+        """ """
+        return cls(df, simulation)
+
+
+    def get_subfind_stats(
+        self, config_file: str = default_halo_stats_config, save: bool = True,
+    ) -> None:
+        """
+        Compute statistics of halos identified with SubFind from one or a
+        collection of simulations.
+
+        Args:
+            config_file:
+                file pointer in which containes info on what statistics to
+                compute and their settings.
+            save:
+                wether to save results to file.
+        """
+        # load settings (stg)
+        with open(config_file) as f:
+            statistics = yaml.load(f, Loader=yaml.FullLoader)
+
+        for name in statistics.keys():
+            statistics[name]["results"] = {"bins": {}, "values": {}}
+        # load particles/utils/stats.py package for dynamic function call
+        module = import_module("wys_ars.particles.hutils")
+
+        # sort statistics according to required halos resolutions
+        stat_names_ord = self._sort_statistics(statistics)
+
+        for snap_nr in self.sim.dir_nrs:
+            snapshot = self.get_subfind_halo_data(snap_nr)
+            if snapshot is None:
+                print(f"No sub- & halos found for snapshot {snap_nr}")
+                continue
+
+            resolution = 0
+            for stat_name in stat_names_ord:
+                if statistics[stat_name]["resolution"] != resolution:
+                    resolution = int(statistics[stat_name]["resolution"])
+                    snapshot = self.filter_resolved_subfind_halos(snapshot, resolution)
+                print(f"     Compute {stat_name}")
+                clas = getattr(module, "SubFind")
+                fct = getattr(clas, stat_name)
+                bins, values = fct(snapshot, **statistics[stat_name]["args"])
+                if (bins is not None) and (values is not None):
+                    statistics[stat_name]["results"]["bins"]["snap_%d" % snap_nr] = bins
+                    statistics[stat_name]["results"]["values"][
+                        "snap_%d" % snap_nr
+                    ] = values
+            collect()
+        if save:
+            self._save_results("subfind", statistics)
+        else:
+            self.statistics = statistics
 
     def filter_resolved_subfind_halos(
         self, snapshot: read_hdf5.snapshot, nr_particles: int,
@@ -204,75 +251,76 @@ class Halos:
                     f"The group data {key} has weird dimensions: {value.shape}."
                 )
         return snapshot
-    
-    def get_subfind_tpcf(
-        self,
-        subfind_type: str,
-        config: dict,
-        save: bool = True,
-    ) -> None:
-        """
-        Compute real- and redshift-space TPCF for halos. This computation is
-        done using halotools.
+   
 
-        https://halotools.readthedocs.io/en/latest/index.html
+    #def get_subfind_tpcf(
+    #    self,
+    #    subfind_type: str,
+    #    config: dict,
+    #    save: bool = True,
+    #) -> None:
+    #    """
+    #    Compute real- and redshift-space TPCF for halos. This computation is
+    #    done using halotools.
 
-        Args:
-            subfind_type: ["Group", "Subhalo"]
-            config:
-            save:
-                wether to save results to file.
-        """
-        tpcf = {}
-        for l in config["multipoles"]:
-            tpcf[str(l)] = {}
-        multipoles = config["multipoles"]
-        del config["multipoles"]
+    #    https://halotools.readthedocs.io/en/latest/index.html
 
-        for snap_nr in self.sim.dir_nrs:
-            snapshot = self.get_subfind_halo_data(snap_nr)
-            
-            if snapshot is None:
-                print(f"No sub- & halos found for snapshot {snap_nr}")
-                continue
+    #    Args:
+    #        subfind_type: ["Group", "Subhalo"]
+    #        config:
+    #        save:
+    #            wether to save results to file.
+    #    """
+    #    tpcf = {}
+    #    for l in config["multipoles"]:
+    #        tpcf[str(l)] = {}
+    #    multipoles = config["multipoles"]
+    #    del config["multipoles"]
 
-            snapshot = self.filter_resolved_subfind_halos(snapshot, 100)
-          
-            if subfind_type == "group":
-                halo_pos = snapshot.cat["GroupPos"][:] * \
-                    snapshot.header.hubble / 1e3  #[Mpc/h]
-                scale_factor = 1 / (1 + snapshot.header.redshift)
-                print("test a -------", scale_factor)
-                halo_vel = snapshot.cat["GroupVel"][:] / scale_factor #[km/s]
-            if subfind_type == "subhalo":
-                halo_pos = snapshot.cat["SubhaloPos"][:] * \
-                    snapshot.header.hubble / 1e3  #[Mpc/h]
-                halo_vel = snapshot.cat["SubhaloVel"][:]  #[km/s]
+    #    for snap_nr in self.sim.dir_nrs:
+    #        snapshot = self.get_subfind_halo_data(snap_nr)
+    #        
+    #        if snapshot is None:
+    #            print(f"No sub- & halos found for snapshot {snap_nr}")
+    #            continue
 
-            s_bins, mu_range, tpcf_s= TPCF.compute(
-                pos=halo_pos,
-                vel=halo_vel,
-                **config,
-                multipole=l,
-            )
-            for l in multipoles:
-                _tpcf = tpcf_multipole(tpcf_s, mu_range, order=l)
-                tpcf[str(l)]["snap_%d" % snap_nr] = _tpcf
-                print(l, "!!!!!!!!!!!! snap_%d" % snap_nr, _tpcf)
-        
-        tpcf["s_bins"] = s_bins
+    #        snapshot = self.filter_resolved_subfind_halos(snapshot, 100)
+    #      
+    #        if subfind_type == "group":
+    #            halo_pos = snapshot.cat["GroupPos"][:] * \
+    #                snapshot.header.hubble / 1e3  #[Mpc/h]
+    #            scale_factor = 1 / (1 + snapshot.header.redshift)
+    #            print("test a -------", scale_factor)
+    #            halo_vel = snapshot.cat["GroupVel"][:] / scale_factor #[km/s]
+    #        if subfind_type == "subhalo":
+    #            halo_pos = snapshot.cat["SubhaloPos"][:] * \
+    #                snapshot.header.hubble / 1e3  #[Mpc/h]
+    #            halo_vel = snapshot.cat["SubhaloVel"][:]  #[km/s]
 
-        if save:
-            IO.save_tpcf(
-                self.sim.dirs['out'],
-                config,
-                multipoles,
-                "subfind",
-                "_"+subfind_type,
-                tpcf,
-            )
-        else:
-            self.tpcf = tpcf
+    #        s_bins, mu_range, tpcf_s= TPCF.compute(
+    #            pos=halo_pos,
+    #            vel=halo_vel,
+    #            **config,
+    #            multipole=l,
+    #        )
+    #        for l in multipoles:
+    #            _tpcf = tpcf_multipole(tpcf_s, mu_range, order=l)
+    #            tpcf[str(l)]["snap_%d" % snap_nr] = _tpcf
+    #            print(l, "!!!!!!!!!!!! snap_%d" % snap_nr, _tpcf)
+    #    
+    #    tpcf["s_bins"] = s_bins
+
+    #    if save:
+    #        IO.save_tpcf(
+    #            self.sim.dirs['out'],
+    #            config,
+    #            multipoles,
+    #            "subfind",
+    #            "_"+subfind_type,
+    #            tpcf,
+    #        )
+    #    else:
+    #        self.tpcf = tpcf
 
     def get_rockstar_stats(
         self,
@@ -303,7 +351,7 @@ class Halos:
         for name in statistics.keys():
             statistics[name]["results"] = {"bins": {}, "values": {}}
         # load particles/utils/stats.py package for dynamic function call
-        module = import_module("wys_ars.particles.utils")
+        module = import_module("wys_ars.particles.hutils")
 
         # sort statistics according to required halo resolutions
         stat_names_ord = self._sort_statistics(statistics)
@@ -345,86 +393,69 @@ class Halos:
             self.statistics = statistics
 
 
-    def get_rockstar_tpcf(
-        self,
-        config: dict,
-        snap_nrs: Optional[List[int]] = None,
-        save: bool = True,
-    ) -> None:
-        """
-        Compute real- and redshift-space TPCF for halos. This computation is
-        done using halotools.
+    #def get_rockstar_tpcf(
+    #    self,
+    #    config: dict,
+    #    snap_nrs: Optional[List[int]] = None,
+    #    save: bool = True,
+    #) -> None:
+    #    """
+    #    Compute real- and redshift-space TPCF for halos. This computation is
+    #    done using halotools.
 
-        https://halotools.readthedocs.io/en/latest/index.html
+    #    https://halotools.readthedocs.io/en/latest/index.html
 
-        Args:
-            config:
-            save:
-                wether to save results to file.
-        """
-        tpcf = {}
-        for l in config["multipoles"]:
-            tpcf[str(l)] = {}
-        multipoles = config["multipoles"]
-        del config["multipoles"]
-        
-        if snap_nrs is None:
-            snap_nrs = self.sim.dir_nrs
+    #    Args:
+    #        config:
+    #        save:
+    #            wether to save results to file.
+    #    """
+    #    tpcf = {}
+    #    for l in config["multipoles"]:
+    #        tpcf[str(l)] = {}
+    #    multipoles = config["multipoles"]
+    #    del config["multipoles"]
+    #    
+    #    if snap_nrs is None:
+    #        snap_nrs = self.sim.dir_nrs
 
-        for snap_nr in snap_nrs:
-            snapshot = self.get_rockstar_halo_data(
-                self.sim.files["halos"][str(snap_nr)]
-            )
-            
-            if snapshot is None:
-                print(f"No sub- & halos found for snapshot {snap_nr}")
-                continue
+    #    for snap_nr in snap_nrs:
+    #        snapshot = self.get_rockstar_halo_data(
+    #            self.sim.files["halos"][str(snap_nr)]
+    #        )
+    #        
+    #        if snapshot is None:
+    #            print(f"No sub- & halos found for snapshot {snap_nr}")
+    #            continue
 
-            snapshot = self.filter_resolved_rockstar_halos(snapshot, 100)
-          
-            halo_pos = snapshot[["x", "y", "z"]].values  #[Mpc/h]
-            halo_vel = snapshot[["vx", "vy", "vz"]].values  #[km/s]
+    #        snapshot = self.filter_resolved_rockstar_halos(snapshot, 100)
+    #      
+    #        halo_pos = snapshot[["x", "y", "z"]].values  #[Mpc/h]
+    #        halo_vel = snapshot[["vx", "vy", "vz"]].values  #[km/s]
 
-            s_bins, mu_range, tpcf_s= TPCF.compute(
-                pos=halo_pos,
-                vel=halo_vel,
-                **config,
-            )
-            for l in multipoles:
-                _tpcf = tpcf_multipole(tpcf_s, mu_range, order=l)
-                tpcf[str(l)]["snap_%d" % snap_nr] = _tpcf
-        
-        tpcf["s_bins"] = s_bins
+    #        s_bins, mu_range, tpcf_s= TPCF.compute(
+    #            pos=halo_pos,
+    #            vel=halo_vel,
+    #            **config,
+    #        )
+    #        for l in multipoles:
+    #            _tpcf = tpcf_multipole(tpcf_s, mu_range, order=l)
+    #            tpcf[str(l)]["snap_%d" % snap_nr] = _tpcf
+    #    
+    #    tpcf["s_bins"] = s_bins
 
-        if save:
-            IO.save_tpcf(
-                self.sim.dirs['out'],
-                config,
-                multipoles,
-                "rockstar",
-                "",
-                tpcf,
-            )
-        else:
-            self.tpcf = tpcf
+    #    if save:
+    #        IO.save_tpcf(
+    #            self.sim.dirs['out'],
+    #            config,
+    #            multipoles,
+    #            "rockstar",
+    #            "",
+    #            tpcf,
+    #        )
+    #    else:
+    #        self.tpcf = tpcf
     
-
-    def get_rockstar_halo_data(self, files_path: list) -> pd.DataFrame:
-        """ """
-        # TODO: currently only one directory supported, e.g. 012
-        first = True
-        for file_path in files_path:
-            snapshot_part = pd.read_csv(
-                file_path, header=0, skiprows=np.arange(1, 20), delim_whitespace=True,
-            )
-
-            if first is True:
-                snapshot = snapshot_part
-                first = False
-            else:
-                snapshot = snapshot.append(snapshot_part, ignore_index=True)
-        return snapshot
-
 
     def filter_resolved_rockstar_halos(
         self, snapshot: pd.DataFrame, nr_particles: int,

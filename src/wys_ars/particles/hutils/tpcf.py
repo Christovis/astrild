@@ -8,8 +8,6 @@ from halotools.mock_observables import tpcf as tpcf_r
 from halotools.mock_observables import s_mu_tpcf
 from halotools import mock_observables as mo
 
-from wys_ars.utils.arepo_hdf5_library import read_hdf5
-
 
 class TPCF:
     def compute(

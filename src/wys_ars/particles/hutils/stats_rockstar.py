@@ -5,10 +5,8 @@ import pandas as pd
 from scipy.stats import binned_statistic
 from scipy.optimize import curve_fit, newton
 
-from halotools.mock_observables import tpcf
-from halotools import mock_observables as mo
-
-from wys_ars.utils.arepo_hdf5_library import read_hdf5
+#from halotools.mock_observables import tpcf
+#from halotools import mock_observables as mo
 
 
 class Rockstar:
@@ -106,25 +104,25 @@ class Rockstar:
             c_mean = None
         return mass_bins, c_mean
 
-    def two_point_corr_fct(
-        snapshot: pd.DataFrame,
-        limits: tuple = None,
-        nbins: int = None,
-        boxsize: float = None,
-    ) -> tuple:
-        if boxsize is None:
-            boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
-        if limits is None:
-            limits = (0.3, boxsize / 5)
-        if nbins is None:
-            nbins = int(2 / 3 * max(limits))
+    #def two_point_corr_fct(
+    #    snapshot: pd.DataFrame,
+    #    limits: tuple = None,
+    #    nbins: int = None,
+    #    boxsize: float = None,
+    #) -> tuple:
+    #    if boxsize is None:
+    #        boxsize = snapshot.header.boxsize / 1e3  #[Mpc/h]
+    #    if limits is None:
+    #        limits = (0.3, boxsize / 5)
+    #    if nbins is None:
+    #        nbins = int(2 / 3 * max(limits))
 
-        r = np.geomspace(min(limits), max(limits), nbins)
-        r_c = 0.5 * (r[1:] + r[:-1])
-        real_tpcf = mo.tpcf(
-            snapshot[["x", "y", "z"]].values,  #[Mpc/h]
-            rbins=r,  #[Mpc/h]
-            period=boxsize,
-            estimator="Landy-Szalay",
-        )
-        return r_c, real_tpcf
+    #    r = np.geomspace(min(limits), max(limits), nbins)
+    #    r_c = 0.5 * (r[1:] + r[:-1])
+    #    real_tpcf = mo.tpcf(
+    #        snapshot[["x", "y", "z"]].values,  #[Mpc/h]
+    #        rbins=r,  #[Mpc/h]
+    #        period=boxsize,
+    #        estimator="Landy-Szalay",
+    #    )
+    #    return r_c, real_tpcf

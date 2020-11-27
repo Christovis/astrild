@@ -14,7 +14,7 @@ from astropy import constants as const
 
 from nbodykit.lab import *
 
-from wys_ars.particles.utils import DTFE
+from wys_ars.particles.hutils import DTFE
 from wys_ars.simulation import Simulation
 
 t1 = time.clock()

@@ -97,10 +97,10 @@ def trim_dataframe_of_objects_crossing_edge(
         -> boolean array with True=(obj not crossing edge)
             and False=(obj too close to edge)
     """
-    bool_3_i_x = data["x_pix"].values + extend * data[key_size].values < npix
-    bool_3_ii_x = data["x_pix"].values - extend * data[key_size].values > 0
-    bool_3_i_y = data["y_pix"].values + extend * data[key_size].values < npix
-    bool_3_ii_y = data["y_pix"].values - extend * data[key_size].values > 0
+    bool_3_i_x = data["theta1_pix"].values + extend * data[key_size].values < npix
+    bool_3_ii_x = data["theta1_pix"].values - extend * data[key_size].values > 0
+    bool_3_i_y = data["theta2_pix"].values + extend * data[key_size].values < npix
+    bool_3_ii_y = data["theta2_pix"].values - extend * data[key_size].values > 0
     indx_b = np.logical_and(
         np.logical_and(bool_3_i_x, bool_3_ii_x),
         np.logical_and(bool_3_i_y, bool_3_ii_y),

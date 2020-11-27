@@ -2,7 +2,7 @@ import os, sys, glob
 import argparse
 from struct import *
 from pathlib import Path
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Type
 
 import numpy as np
 import pandas as pd
@@ -10,9 +10,10 @@ import pandas as pd
 import astropy
 from astropy import units as u
 from astropy import constants as const
-from astropy.cosmology import LambdaCDM, cvG
+from astropy.cosmology import LambdaCDM#, cvG
 
 from wys_ars.simulation import Simulation
+from wys_ars.particles.ecosmog import Ecosmog
 from wys_ars.particles.halo import Halos
 from wys_ars.io import IO
 
@@ -62,7 +63,7 @@ class RayRamses(Simulation):
         fields: list,
         dir_out: str = None,
         convert: bool = False,
-        cosmo: astropy.cosmology = cvG,
+        cosmo: astropy.cosmology = LambdaCDM,
         save: bool = True,
     ) -> None:
         """
@@ -330,76 +331,62 @@ class RayRamses(Simulation):
 
     def find_halos_in_raytracing_snapshot(
         self,
-        halos,
-        box_nr,
-        snap_nr,
-        ray_nr,
-        boxdist,
-        boxsize,
-        snaplimit,
-        hubble,
+        ecosmog: Type[Ecosmog],
+        box_nr: int,
+        snap_nr: int,
+        ray_nr: int,
+        boxdist: float,
+        boxsize: float,
+        snaplimit: tuple,
+        hubble: float,
     ) -> Union[None, pd.DataFrame]:
         coeff = hubble / 1e3
-        halocat = halos.get_subfind_halo_data(snap_nr=snap_nr)
-        if halocat is None:
+        halos = Halos.from_subfind(snap_nr, ecosmog)
+        if halos.data is None:
             return None
         else:
-            halocat = halos.get_subfind_halo_data(snap_nr=snap_nr)
-            halocat = halos.filter_nonzero_subfind_halos_size(halocat).cat
+            halocat = halos.filter_nonzero_subfind_halos_size(halos.data).cat
         halocatindex = np.arange(len(halocat["Group_M_Crit200"][:]))
+        print(f"There are {len(halocatindex)} halos in box {box_nr} snapshot {snap_nr}")
+
+        # cartesian coord. in light-cone [Mpc/h]
+        pos = halocat["GroupPos"][:, :] * coeff
+        pos[:, 0] = pos[:, 0] - boxsize / 2
+        pos[:, 1] = pos[:, 1] - boxsize / 2
+        pos[:, 2] = pos[:, 2] + boxdist
         # radial distance from observer [Mpc/h]
-        dist = np.sqrt(
-            (halocat["GroupPos"][:, 0] * coeff - boxsize / 2) ** 2
-            + (halocat["GroupPos"][:, 1] * coeff - boxsize / 2) ** 2
-            + (halocat["GroupPos"][:, 2] * coeff + boxdist) ** 2
-        )
-        # angular
-        x_theta = (
-            np.arctan(
-                (halocat["GroupPos"][:, 0] * coeff - boxsize / 2)
-                / (halocat["GroupPos"][:, 2] * coeff + boxdist)
-            )
-            * 180
-            / np.pi
-        )
-        y_theta = (
-            np.arctan(
-                (halocat["GroupPos"][:, 1] * coeff - boxsize / 2)
-                / (halocat["GroupPos"][:, 2] * coeff + boxdist)
-            )
-            * 180
-            / np.pi
-        )
+        rad_dist = np.sqrt(pos[:, 0]**2 + pos[:, 1]**2 + pos[:, 2]**2)
+        # angular coord [deg]
+        theta1_deg = np.arctan(pos[:, 0] / pos[:, 2]) * 180/np.pi
+        theta2_deg = np.arctan(pos[:, 1] / pos[:, 2]) * 180/np.pi
 
         # index of halos in light-cone
         indx = np.where(
-            (dist >= np.min(snaplimit))
-            & (dist <= np.max(snaplimit))
-            & (np.abs(x_theta) <= self.opening_angle / 2)
-            & (np.abs(y_theta) <= self.opening_angle / 2)
+            (rad_dist >= np.min(snaplimit))
+            & (rad_dist <= np.max(snaplimit))
+            & (np.abs(theta1_deg) <= self.opening_angle / 2)
+            & (np.abs(theta2_deg) <= self.opening_angle / 2)
         )[0]
-        print(f"There are {len(indx)} halos in here")
+        print(f"There are {len(indx)} halos in light-cone in box {box_nr} snapshot {snap_nr}")
 
-        # velocity projection
-        pos_norm = np.linalg.norm(halocat["GroupPos"][indx, :], axis=1)
+        # project 3D velocity along line-of-sight in cart. coord.
+        pos_norm = np.linalg.norm(pos[indx, :], axis=1)
         vr = (
-            np.abs(
-                (
-                    halocat["GroupVel"][indx, :] * halocat["GroupPos"][indx, :]
-                ).sum(axis=1)
-                / pos_norm
-            )[:, np.newaxis]
-            * halocat["GroupPos"][indx, :]
-            / pos_norm[:, np.newaxis]
-        )
+            (
+                halocat["GroupVel"][indx, :] * pos[indx, :] # element-wise dot-product
+            ).sum(axis=1) / (pos_norm**2)
+        )[:, np.newaxis] * pos[indx, :]
+        # project 3D velocity along transverse to line-of-sight direction
+        # in cart. coord.
         vt = halocat["GroupVel"][indx, :] - vr
+        # small angle approximation
+        # -> TODO improve by projecting on spher. coord. unit vectors e_theta and e_phi
         vel_x = vt[:, 0]
         vel_y = vt[:, 1]
 
         r200_deg = (
-            np.arctan(halocat["Group_R_Crit200"][indx] * coeff / dist[indx])
-            * 180
-            / np.pi
+            np.arctan(halocat["Group_R_Crit200"][indx] * coeff / rad_dist[indx])
+            * 180 / np.pi
         )
 
         halo_id = [
@@ -408,17 +395,23 @@ class RayRamses(Simulation):
         ]
         halos_dict = {
             "id": halo_id,
-            "dist": dist[indx],
-            "x_deg": x_theta[indx] + self.opening_angle / 2,
-            "x_pix": self._degree_to_pixel(
-                x_theta[indx] + self.opening_angle / 2
+            "x": pos[indx, 0],
+            "y": pos[indx, 1],
+            "z": pos[indx, 2],
+            "rad_dist": rad_dist[indx],
+            "theta1_deg": theta1_deg[indx] + self.opening_angle / 2,
+            "theta1_pix": self._degree_to_pixel(
+                theta1_deg[indx] + self.opening_angle / 2
             ),
-            "y_deg": y_theta[indx] + self.opening_angle / 2,
-            "y_pix": self._degree_to_pixel(
-                y_theta[indx] + self.opening_angle / 2
+            "theta2_deg": theta2_deg[indx] + self.opening_angle / 2,
+            "theta2_pix": self._degree_to_pixel(
+                theta2_deg[indx] + self.opening_angle / 2
             ),
-            "x_vel": vel_x,
-            "y_vel": vel_y,
+            "x_vel": halocat["GroupVel"][indx, 0],
+            "y_vel": halocat["GroupVel"][indx, 1],
+            "z_vel": halocat["GroupVel"][indx, 2],
+            "theta1_vel": vel_x,
+            "theta2_vel": vel_y,
             "m200": halocat["Group_M_Crit200"][indx],
             "r200_deg": r200_deg,
             "r200_pix": self._degree_to_pixel(r200_deg),
@@ -435,11 +428,11 @@ class RayRamses(Simulation):
 
     def find_halos_in_raytracing_box(
         self,
-        halos: Halos,
-        snapdist: None,
-        box_nr: None,
-        boxsize: None,
-        hubble: None,
+        ecosmog: Type[Ecosmog],
+        snapdist: float,
+        box_nr: int,
+        boxsize: float,
+        hubble: float,
     ) -> Union[None, pd.DataFrame]:
         """
         Args:
@@ -451,12 +444,12 @@ class RayRamses(Simulation):
         # run through ray-ramses snapshots
         for ray_nr in np.unique(self.file_nrs)[:-1]:
             snap_nr = (
-                ray_nr + len(halos.sim.config.index) - len(self.config.index)
+                ray_nr + len(ecosmog.config.index) - len(self.config.index)
             )
             snaplimit = (snapdist[ray_nr - 1], snapdist[ray_nr])
 
             halos_df = self.find_halos_in_raytracing_snapshot(
-                halos,
+                ecosmog,
                 box_nr,
                 snap_nr,
                 ray_nr,
