@@ -12,7 +12,7 @@ import astropy
 from astropy.io import fits
 from astropy import units as un
 import healpy as hp
-import pymaster as nmt
+#import pymaster as nmt
 
 from wys_ars.rays.utils import Filters
 from wys_ars.rays.skys.sky_utils import SkyUtils
@@ -154,7 +154,8 @@ class SkyNamaster:
         """
         Transform SkyHealpix to SkyNamaster.
         """
-        f_0 = nmt.NmtField(self.data["mask"], [self.data[which]])
+        pass
+        #f_0 = nmt.NmtField(self.data["mask"], [self.data[which]])
 
     def resize(
         self,

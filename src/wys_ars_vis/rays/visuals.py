@@ -17,7 +17,7 @@ from wys_ars.rays.dipole_finder import Dipoles
 from wys_ars.rays.skys import SkyArray
 
 
-def _get_velocity_field(df: pd.DataFrame, npix: int) -> tuple:
+def _get_velocity_field(df: pd.DataFrame, vel_key: str, npix: int) -> tuple:
     """
     2D binning of velocity field
     """
@@ -26,16 +26,16 @@ def _get_velocity_field(df: pd.DataFrame, npix: int) -> tuple:
 
     # Velocity
     velx_field = stats.binned_statistic_2d(
-        df["x_deg"].values,
-        df["y_deg"].values,
-        df["x_vel"].values*df["m200"].values,
+        df["theta1_deg"].values,
+        df["theta2_deg"].values,
+        df["theta1"+vel_key].values*df["m200"].values,
         'sum',
         bins=[x_bin_edges, y_bin_edges],
     )
     vely_field = stats.binned_statistic_2d(
-        df["x_deg"].values,
-        df["y_deg"].values,
-        df["y_vel"].values*df["m200"].values,
+        df["theta1_deg"].values,
+        df["theta2_deg"].values,
+        df["theta2"+vel_key].values*df["m200"].values,
         'sum',
         bins=[x_bin_edges, y_bin_edges],
     )
@@ -53,6 +53,7 @@ def _get_velocity_field(df: pd.DataFrame, npix: int) -> tuple:
 
 def maps_with_vel_field(
     halos: pd.DataFrame,
+    vel_key: str,
     filepaths_map: str,
     box_nrs: List[int],
     snap_nrs: List[int],
@@ -87,7 +88,7 @@ def maps_with_vel_field(
             (halos["box_nr"] == box_nrs[idx]) & (halos["ray_nr"] == snap_nrs[idx])
         ]
         # get velocity field
-        coord_x, coord_y, vel_x, vel_y = _get_velocity_field(halos_sel, npix)
+        coord_x, coord_y, vel_x, vel_y = _get_velocity_field(halos_sel, vel_key, npix)
        
         mi = np.min(skyarray.data["orig"]) * 0.9
         ma = np.max(skyarray.data["orig"]) * 0.9
@@ -156,6 +157,7 @@ def dipole_maps(
     filepath_map: str,
     extent: float,
     theta: float = 20.,
+    arrow_scale: Optional[float] = None,
 ) -> mpl.figure.Figure:
     """
     Plot sky-data contained in filepaths_map overlayed by halo-data
@@ -180,25 +182,53 @@ def dipole_maps(
         dip = dipoles[dipoles["index"] == dipole_index[idx]]
         zoom = Dipoles.get_dipole_image(
             skyarray,
-            (dip.x_pix.values[0], dip.y_pix.values[0]),
+            (dip.theta1_pix.values[0], dip.theta2_pix.values[0]),
             dip.r200_pix.values[0] * extent,
             dip.r200_deg.values[0] * extent,
         )
         ax.imshow(
             zoom.data["orig"] * 1e6,
             extent=[
-                dip.x_deg.values[0] - dip.r200_deg.values[0]*extent,
-                dip.x_deg.values[0] + dip.r200_deg.values[0]*extent,
-                dip.y_deg.values[0] - dip.r200_deg.values[0]*extent,
-                dip.y_deg.values[0] + dip.r200_deg.values[0]*extent,
+                dip.theta1_deg.values[0] - dip.r200_deg.values[0]*extent,
+                dip.theta1_deg.values[0] + dip.r200_deg.values[0]*extent,
+                dip.theta2_deg.values[0] - dip.r200_deg.values[0]*extent,
+                dip.theta2_deg.values[0] + dip.r200_deg.values[0]*extent,
             ],
             cmap=cm.RdBu_r,
             origin="lower",
             zorder=0,
         )
+        ax.add_artist(
+            plt.Circle(
+                (dip.theta1_deg.values[0], dip.theta2_deg.values[0]),
+                dip.r200_deg.values[0],
+                fill=False,
+                #alpha=0.5,
+                color="lime",
+                #edgecolor="w",
+                linewidth=1,
+                zorder=1,
+            )
+        )
+        ax.quiver(
+            dip.theta1_deg.values[0], dip.theta2_deg.values[0],
+            dip.theta1_vel.values[0], dip.theta2_vel.values[0],
+            facecolor="k",
+            edgecolor="w",
+            scale=arrow_scale,
+            zorder=2,
+        )
+        ax.quiver(
+            dip.theta1_deg.values[0], dip.theta2_deg.values[0],
+            dip.theta1_mvel.values[0], dip.theta2_mvel.values[0],
+            facecolor="grey",
+            edgecolor="w",
+            scale=arrow_scale,
+            zorder=2,
+        )
         ax.text(
-            dip.x_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
-            dip.y_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
+            dip.theta1_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
+            dip.theta2_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
             "dip.idx = %.2f" % dipole_index[idx],
             color='black', 
             bbox=dict(
@@ -207,5 +237,8 @@ def dipole_maps(
                 alpha=0.8,
                 boxstyle='round,pad=0.5',
             ),
+            zorder=3,
         )
+        ax.set_xlabel(r"$\theta_1 \quad $[deg]")
+    axis[0].set_ylabel(r"$\theta_2 \quad $[deg]")
     return fig

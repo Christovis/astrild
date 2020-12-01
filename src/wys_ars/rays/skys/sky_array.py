@@ -14,7 +14,7 @@ from astropy.io import fits
 from astropy import units as un
 import lenstools
 from lenstools import ConvergenceMap
-import pymaster as nmt
+#import pymaster as nmt
 
 from wys_ars.rays.utils import Filters
 from wys_ars.rays.skys.sky_utils import SkyUtils
@@ -454,9 +454,9 @@ class SkyArray:
         Lx = Ly = self._opening_angle * np.pi / 180.0
 
         cl_tt_cmb = np.load(filepath_cl)[1]
-        cmb = nmt.synfast_flat(
-            Nx, Ny, Lx, Ly, cls=np.array([cl_tt_cmb]), spin_arr=np.array([0])
-        )[0]
+        #cmb = nmt.synfast_flat(
+        #    Nx, Ny, Lx, Ly, cls=np.array([cl_tt_cmb]), spin_arr=np.array([0])
+        #)[0]
         if rtn:
             return cmb
         else:

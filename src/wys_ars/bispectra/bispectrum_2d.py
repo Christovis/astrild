@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 
 from astropy import units as un
-import lenstools
-from lenstools import ConvergenceMap
+#import lenstools
+#from lenstools import ConvergenceMap
 
 from wys_ars.rays.skymap import SkyMap
 from wys_ars.io import IO

@@ -1,3 +1,6 @@
+src/wys_ars/particles/utils_cython/dist/
+src/wys_ars/particles/utils_cython/build/
+src/wys_ars/particles/utils_cython/pairwise_velocity_routines.egg-info/
 src/wys_ars/utils/arepo_hdf5_library_2020/
 /.coverage
 /.mypy_cache/
@@ -12,3 +15,7 @@ tests/.coverage
 tests/coverage.xml
 tests/pytest.ini
 __init__.pyc
+*.so
+*.c
+*.html
+*.html

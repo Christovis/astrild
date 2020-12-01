@@ -14,7 +14,7 @@ from astropy import units as un
 import lenstools
 from lenstools import ConvergenceMap
 import healpy as hp
-import pymaster as nmt
+#import pymaster as nmt
 
 from wys_ars.simulation import Simulation
 from wys_ars.rays.utils import Filters
@@ -242,9 +242,9 @@ class SkyHealpix:
         _skyarray = copy.deepcopy(self.data["orig"])
         _skyarray[~self.data["mask"]] = hp.UNSEEN
         _mask = copy.deepcopy(self.data["mask"]) * 1
-        _mask = nmt.mask_apodization(_mask, apodization_width, apotype="C2")
-        print("------------->", _mask.shape)
-        self.data["nm"] = nmt.NmtField(_mask, [_skyarray])
+        #_mask = nmt.mask_apodization(_mask, apodization_width, apotype="C2")
+        #print("------------->", _mask.shape)
+        #self.data["nm"] = nmt.NmtField(_mask, [_skyarray])
         # return SkyNamaster.from_array(
         #    sky_field,
         #    self._npix,
