@@ -54,8 +54,10 @@ class Halos:
     ):
         self.data = halos
         self.sim = simulation
-        #self.sim.type = "particles"
-   
+        if "fof" in list(self.sim.files.keys()):
+            self.halotype = "Arepo"
+        elif "halos" in list(self.sim.files.keys()):
+            self.halotype = "Rockstar"
 
     @classmethod
     def from_subfind(
@@ -102,7 +104,13 @@ class Halos:
     def from_rockstar(
         cls, snap_nr: int, simulation: Optional[Type[Ecosmog]] = None,
     ) -> "Halos":
-        """ """
+        """
+        Load halo data from Rockstar halo finder into pandas.DataFrame
+
+        Args:
+            snap_nr:
+            simulation:
+        """
         # TODO: currently only one directory supported, e.g. 012
         files_path = simulation.files["halos"][str(snap_nr)]
         first = True

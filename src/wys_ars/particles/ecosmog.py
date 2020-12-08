@@ -40,6 +40,7 @@ class EcosmogWarning(BaseException):
 class Ecosmog(Simulation):
     """
     Attributes:
+        config: containing info of snapshots, e.g.: redshift, scale factor, Da
         dir_sim: directory of simulation
         dir_out: directory for results/returns
         file_dsc: file describtion for identification

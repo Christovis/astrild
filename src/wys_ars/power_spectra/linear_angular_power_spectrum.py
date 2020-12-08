@@ -13,7 +13,7 @@ import multiprocessing
 import healpy as hp
 from astropy import units as un
 from astropy import constants as const
-from astropy.cosmology import LambdaCDM, z_at_value
+from astropy.cosmology import LambdaCDM
 import camb
 import lenstools
 from lenstools import ConvergenceMap

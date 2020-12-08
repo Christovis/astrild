@@ -9,7 +9,7 @@ import pandas as pd
 
 from astropy import units as un
 from astropy import constants as const
-from astropy.cosmology import LambdaCDM, z_at_value
+from astropy.cosmology import LambdaCDM
 from nbodykit.lab import cosmology
 import camb
 import lenstools
