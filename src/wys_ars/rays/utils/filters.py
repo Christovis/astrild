@@ -384,7 +384,6 @@ class Filters:
         rad_filter = alpha * rad_obj
         extend = np.sqrt(2)
         rad_filter_sqrt2 = np.ceil(extend * rad_filter).astype(int)
-        print("rad_filter", rad_filter, rad_filter_sqrt2)
         # annulus thickness normalised against ith void radius
         delta_eta = extend / args["Nbins"]
 
@@ -414,8 +413,6 @@ class Filters:
 
         # Mean value in rad_filter -> sqrt(2)*rad_filter
         black_hat = np.mean(annulus_value[np.ceil(1 / delta_eta).astype(int) :])
-
-        print("CFT", white_hat, black_hat)
 
         return white_hat - black_hat
 

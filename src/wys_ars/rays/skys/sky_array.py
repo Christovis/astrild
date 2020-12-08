@@ -10,6 +10,7 @@ from skimage import transform
 from scipy.interpolate import RectBivariateSpline
 
 import astropy
+from astropy.constants import sigma_T, m_p, c
 from astropy.io import fits
 from astropy import units as un
 import lenstools
@@ -23,6 +24,12 @@ from wys_ars.io import IO
 
 dir_src = Path(__file__).parent.parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
+
+sigma_T = sigma_T.to(un.Mpc**2).value #[Mpc^2]
+m_p = m_p.to(un.M_sun).value #[M_sun]
+c_light = c.to("km/s").value
+T_cmb = 2.7251 #[K]
+Gcm2 = 4.785E-20 # G/c^2 (Mpc/M_sun)
 
 class SkyArrayWarning(BaseException):
     pass
@@ -46,6 +53,7 @@ class SkyArray:
         from_file:
         from_dataframe:
         from_array:
+        from_dict_to_deflection_angle_map:
         pdf:
         wl_peak_counts:
         add_galaxy_shape_noise:
@@ -117,6 +125,7 @@ class SkyArray:
                 map_array, opening_angle, quantity, dir_in, map_file
             )
 
+
     @classmethod
     def from_dataframe(
         cls,
@@ -145,6 +154,7 @@ class SkyArray:
             map_array, opening_angle, quantity, dir_in, map_file
         )
 
+
     @classmethod
     def from_array(
         cls,
@@ -160,10 +170,143 @@ class SkyArray:
         Args:
             map_filename:
                 File path with which skymap pd.DataFrame can be loaded.
+            opening_angle: [deg]
         """
         assert map_array.shape[0] == map_array.shape[1]
         dirs = {"sim": dir_in}
         return cls(map_array, opening_angle, quantity, dirs, map_file)
+    
+
+    @classmethod
+    def from_dict_to_deflection_angle_map(
+        cls,
+        theta_200c: float,
+        M_200c: float,
+        c_200c: float,
+        angu_diam_dist: Optional[float] = None,
+        extend: float = 1,
+        direction: int = 0,
+        suppress: bool = False,
+        suppression_R: float = 1,
+    ) -> "SkyArray":
+        """
+        Calculate the deflection angle of a halo with NFW profile using method
+        in described Sec. 3.2 in Baxter et al 2015 (1412.7521).
+
+        Note:
+            In this application it can be assumed that s_{SL}/s_{S}=1. Furthermore,
+            we can deglect vec{theta}/norm{theta} as it will be multiplied by the
+            same in the integral of Eq. 9 in Yasini et a. 2018 (1812.04241).
+        
+        Args:
+            theta_200c: radius, [deg]
+            M_200c: mass, [Msun]
+            c_200c: concentration, [-]
+            extend: The size of the map from which the trans-vel is calculated
+                in units of R200 of the associated halo.
+            suppress:
+            suppression_R:
+            angu_diam_dist: angular diameter distance, [Mpc]
+            direction: 0=(along x-axis), 1=(along y-axis)
+
+        Returns:
+        """
+        R_200c = np.tan(theta_200c * np.pi / 180) * angu_diam_dist # [Mpc]
+        edges = np.linspace(0, R_200c*extend, pixel_nr) - R_200c * extend / 2
+        thetax, thetay = np.meshgrid(edges, edges)
+        R = np.sqrt(thetax ** 2 + thetay ** 2) # distances to pixels
+        # Eq. 8
+        A = M_200c * c_200c ** 2 / (
+            4. * np.pi * (np.log(1 + c_200c) - c_200c / (1 + c_200c))
+        )
+        # constant in Eq. 6
+        C = 16 * np.pi * Gcm2 * A / (c_200c * R_200c)
+        # argument for Eq. 7
+        x = (R * c_200c / R_200c).astype(np.complex)
+        # Eq. 7
+        f = np.true_divide(1, x) * (
+            np.log(x / 2) + 2 / np.sqrt(1 - x ** 2) * \
+            np.arctanh(np.sqrt(np.true_divide(1 - x, 1 + x)))
+        )
+        
+        # Eq. 6
+        if direction == 0:
+            quantity = "alphax"
+            thetax_hat = np.true_divide(thetax, R)
+            alpha_map = C * thetax_hat * f
+        else:
+            quantity = "alphay"
+            thetay_hat = np.true_divide(thetay, R)
+            alpha_map = C * thetay_hat * f
+
+        if suppress:  # suppress alpha at large radii
+            suppress_radius = suppression_R * R_200c
+            alpha_map *= np.exp(-(R / suppress_radius) ** 3)
+
+        opening_angle = 2 * theta_200c * extend
+        return cls(alpha_map, opening_angle, quantity, dirs=None, map_file=None)
+    
+
+    @classmethod
+    def from_dict_to_temperature_perturbation_map(
+        cls,
+        theta_200c: float,
+        M_200c: float,
+        c_200c: float,
+        vel: float,
+        angu_diam_dist: Optional[float] = None,
+        extend: float = 1,
+        direction: int = 0,
+        suppress: bool = False,
+        suppression_R: float = 1,
+    ) -> "SkyArray":
+        """
+        The Rees-Sciama / Birkinshaw-Gull / moving cluster of galaxies effect.
+
+        Args:
+            vel: transverse to the line-of-sight velocity, [km/sec]
+
+        Returns:
+            Temperature perturbation map, \Delta T / T_CMB
+        """
+        #TODO: unify with from_dict_to_deflection_angle_map
+        
+        R_200c = np.tan(theta_200c * np.pi / 180) * angu_diam_dist # [Mpc]
+        edges = np.linspace(0, R_200c*extend, pixel_nr) - R_200c * extend / 2
+        thetax, thetay = np.meshgrid(edges, edges)
+        R = np.sqrt(thetax ** 2 + thetay ** 2) # distances to pixels
+        # Eq. 8
+        A = M_200c * c_200c ** 2 / (
+            4. * np.pi * (np.log(1 + c_200c) - c_200c / (1 + c_200c))
+        )
+        # constant in Eq. 6
+        C = 16 * np.pi * Gcm2 * A / (c_200c * R_200c)
+        # argument for Eq. 7
+        x = (R * c_200c / R_200c).astype(np.complex)
+        # Eq. 7
+        f = np.true_divide(1, x) * (
+            np.log(x / 2) + 2 / np.sqrt(1 - x ** 2) * \
+            np.arctanh(np.sqrt(np.true_divide(1 - x, 1 + x)))
+        )
+        
+        # Eq. 6
+        if direction == 0:
+            quantity = "alphax"
+            thetax_hat = np.true_divide(thetax, R)
+            alpha_map = C * thetax_hat * f
+        else:
+            quantity = "alphay"
+            thetay_hat = np.true_divide(thetay, R)
+            alpha_map = C * thetay_hat * f
+        
+        dt_map = - alpha_map * vel / c_light.to("km/s").value
+
+        if suppress:  # suppress alpha at large radii
+            suppress_radius = suppression_R * R_200c
+            dt_map *= np.exp(-(R / suppress_radius) ** 3)
+
+        opening_angle = 2 * theta_200c * extend
+        return cls(dt_map, opening_angle, quantity, dirs=None, map_file=None)
 
     @property
     def npix(self) -> int:
@@ -172,6 +315,7 @@ class SkyArray:
     @property
     def opening_angle(self) -> float:
         return self._opening_angle
+
 
     def pdf(self, nbins: int, of: str = "orig") -> dict:
         _pdf = {}
@@ -358,7 +502,8 @@ class SkyArray:
         orig_data: str = None,
     ) -> Union[np.ndarray, None]:
         """
-        Convolve kernel (filter_dsc) over skymap image (on)
+        Apply kernel (filter_dsc) over skymap image (on).
+        
         Args:
             filter_dsc: Kernel description.
                 Note that theta_i should be given in astropy.units!
@@ -366,11 +511,17 @@ class SkyArray:
             orig_data: What to do with data of the image to be processed:
                 e.g. no, shallow, or deep copy
         """
+        if on:
+            assert on in list(self.data.keys()), "Map does not exist."
+            img = self.data[on]
+            map_name = [on]
+        else:
+            map_name = [""]
+        
         # load rays/utils/filters.py package for dynamic function call
         module = import_module("wys_ars.rays.utils")
-        img = self._manage_img_data(on, img, orig_data)
+        img = self._manage_img_data(img, orig_data)
 
-        map_name = [on]
         for filter_name, args in filter_dsc.items():
             if rtn is False:
                 abbrev = args["abbrev"]
@@ -430,6 +581,7 @@ class SkyArray:
         else:
             raise SkyArrayWarning(f"GSN should not be added to {self.quantity}")
 
+
     def create_cmb(
         self,
         filepath_cl: str,
@@ -464,6 +616,7 @@ class SkyArray:
         else:
             self.data["cmb"] = cmb
 
+
     def add_cmb(
         self,
         filepath_cl: str,
@@ -489,6 +642,7 @@ class SkyArray:
                     self.data[f"{on}_cmb"] = _map
         else:
             raise SkyArrayWarning(f"CMB should not be added to {self.quantity}")
+
 
     def convert_convergence_to_deflection(
         self,
@@ -529,6 +683,7 @@ class SkyArray:
             self.data["defltx"] = alpha_2
             self.data["deflty"] = alpha_1
 
+
     def convert_deflection_to_shear(
         self,
         on: Optional[str] = None,
@@ -561,22 +716,22 @@ class SkyArray:
             self.data["gammay"] = gamma_1
     
 
+    @staticmethod
     def _manage_img_data(
-        self,
-        of: Optional[str] = None,
-        img: Optional[np.ndarray] = None,
+        img: np.ndarray,
         orig_data: str = None,
     ) -> np.ndarray:
-        """ Handle the memory of the image to be processed """
-        #TODO handle images that can be produces, but haven't been yet
-        #TODO maybe things belongs better into sky_utils or even further up
-        if of:
-            assert of in list(self.data.keys()), "Map does not exist."
-            img = copy.deepcopy(self.data[of])
-        
+        """
+        Handle the memory location of the image to be processed.
+
+        Args:
+            img: memory pointer of the image data.
+            orig_data: action key word.
+
+        Returns:
+            cimg: pointer to (new) memory location.
+        """
         if orig_data == "shallow":
-            # Only a shallow copy here, as in my current use case, memory can
-            # easily explode (especially in Dipoles.get_transverse_velocity)
             cimg = copy.copy(img)
         elif orig_data == "deep":
             cimg = copy.deepcopy(img)

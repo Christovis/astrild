@@ -16,6 +16,14 @@ from colour import Color
 from wys_ars.rays.dipole_finder import Dipoles
 from wys_ars.rays.skys import SkyArray
 
+color = [
+    Color(rgb=(np.array([5, 102, 141])/255)),  #blue
+    Color(rgb=(np.array([67, 170, 139])/255)), #green
+    Color(rgb=(np.array([248, 150, 30])/255)), #orange
+    Color(rgb=(np.array([249, 65, 68])/255)),  #red
+]
+color = mpl.colors.ListedColormap([c.rgb for c in color])
+
 
 def _get_velocity_field(df: pd.DataFrame, vel_key: str, npix: int) -> tuple:
     """
@@ -154,7 +162,7 @@ def maps_with_vel_field(
 def dipole_maps(
     dipole_index: List[int],
     dipoles: pd.DataFrame,
-    filepath_map: str,
+    skymap: Union[str, np.ndarray],
     extent: float,
     theta: float = 20.,
     arrow_scale: Optional[float] = None,
@@ -170,13 +178,21 @@ def dipole_maps(
     )
     
     # Load Map
-    skyarray = SkyArray.from_file(
-        filepath_map,
-        opening_angle=theta,
-        quantity="isw_rs",
-        dir_in=None,
-        convert_unit=True,
-    )
+    if isinstance(skymap, str):
+        skyarray = SkyArray.from_file(
+            skymap,
+            opening_angle=theta,
+            quantity="isw_rs",
+            dir_in=None,
+            convert_unit=True,
+        )
+    if isinstance(skymap, np.ndarray):
+        skyarray = SkyArray.from_array(
+            skymap,
+            opening_angle=theta,
+            quantity="isw_rs",
+            dir_in=None,
+        )
 
     for idx, ax in enumerate(axis.reshape(-1)):
         dip = dipoles[dipoles["index"] == dipole_index[idx]]
@@ -241,4 +257,54 @@ def dipole_maps(
         )
         ax.set_xlabel(r"$\theta_1 \quad $[deg]")
     axis[0].set_ylabel(r"$\theta_2 \quad $[deg]")
+    return fig
+
+def dipole_cross_section(
+    dipole_index: List[int],
+    dipoles: pd.DataFrame,
+    filepath_map: str,
+    extent: float,
+    theta: float = 20.,
+    arrow_scale: Optional[float] = None,
+) -> mpl.figure.Figure:
+    """
+    """
+    fig, axis = plt.subplots(
+        1, len(dipole_index),
+        figsize=(16, 5),
+        facecolor="w", edgecolor="k",
+    )
+    
+    # Load Map
+    skyarray = SkyArray.from_file(
+        filepath_map,
+        opening_angle=theta,
+        quantity="isw_rs",
+        dir_in=None,
+        convert_unit=True,
+    )
+
+    for idx, ax in enumerate(axis.reshape(-1)):
+        dip = dipoles[dipoles["index"] == dipole_index[idx]]
+        zoom = Dipoles.get_dipole_image(
+            skyarray,
+            (dip.theta1_pix.values[0], dip.theta2_pix.values[0]),
+            dip.r200_pix.values[0] * extent,
+            dip.r200_deg.values[0] * extent,
+        )
+        ax.plot(
+            zoom[:, len(zoom)//2],
+            color=color(0),
+        )
+        ax.text(
+            0.5, 0.5,
+            "dip.idx = %.2f" % dipole_index[idx],
+            color='black',
+            horizontalalignment='center',
+            verticalalignment='center',
+            transform=ax.transAxes,
+            zorder=3,
+        )
+        ax.set_ylabel(r"pixels")
+    axis[0].set_ylabel(r"$\theta_2 \quad $[K]")
     return fig
