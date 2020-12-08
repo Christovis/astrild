@@ -44,6 +44,8 @@ class SkyArray:
 
     Methods:
         from_file:
+        from_dataframe:
+        from_array:
         pdf:
         wl_peak_counts:
         add_galaxy_shape_noise:

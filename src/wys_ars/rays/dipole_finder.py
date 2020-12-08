@@ -259,9 +259,18 @@ class Dipoles:
                     for i in ids
                 ]
 
+
     def find_nearest_in_box(
         self, df1: pd.DataFrame, df2: pd.DataFrame
     ) -> tuple:
+        """
+        This function has the same purpose as self.find_nearest(), but is for
+        simulation box.
+        
+        Args:
+            df1, df2: pd.DataFrames of objects that should be associated with 
+            each other.
+        """
         distances = []
         ids = []
         for box_nr in np.unique(df1["box_nr"].values):
@@ -279,9 +288,18 @@ class Dipoles:
             ids += _indices
         return distances, ids
 
+
     def find_nearest_in_snap(
         self, df1: pd.DataFrame, df2: pd.DataFrame
     ) -> tuple:
+        """
+        This function has the same purpose as self.find_nearest(), but is for
+        simulation snapshot.
+
+        Args:
+            df1, df2: pd.DataFrames of objects that should be associated with 
+            each other.
+        """
         distances = []
         ids = []
         for ray_nr in np.unique(df1["ray_nr"].values):
@@ -294,12 +312,18 @@ class Dipoles:
             ids += _indices
         return distances, ids
 
+
     def _get_index_and_distance(
         self, df1: pd.DataFrame, df2: pd.DataFrame
     ) -> tuple:
         """
         Args:
+            df1, df2: pd.DataFrames of objects that should be associated with 
+            each other.
+        
         Returns:
+            distances:
+            ids:
         """
         if len(df2.index.values) == 0:
             print("There are no Halos in this distance")
@@ -322,6 +346,7 @@ class Dipoles:
                 distances[nan_idx] = -99999
         return list(distances), list(ids)
 
+    
     def _get_cpu_nr(self, ncpus: int) -> None:
         """ Setting the nr. of cpus to use """
         if (ncpus == 0) or (ncpus < -1):
@@ -334,7 +359,7 @@ class Dipoles:
         else:
             self._ncpus = ncpus
 
-    #@profile
+    
     def get_transverse_velocities_from_sky(
         self,
         skyarrays: Dict[str, Type[SkyArray]],
@@ -407,9 +432,9 @@ class Dipoles:
         _array_of_failures = np.ones(len(self.data.index)) * -99999
 
         if "theta1_mvel" in self.data.columns.values:
-            _x_vel = self.data["theta1_mvel"]
-            _y_vel = self.data["theta2_mvel"]
-            del self.data[["theta1_mvel", "theta2_mvel"]]
+            _x_vel = self.data["theta1_mvel"].values
+            _y_vel = self.data["theta2_mvel"].values
+            self.data = self.data.drop(["theta1_mvel", "theta2_mvel"], axis=1)
         else:
             _x_vel = copy.deepcopy(_array_of_failures)
             _y_vel = copy.deepcopy(_array_of_failures)
@@ -454,7 +479,7 @@ class Dipoles:
             self.data, extend, npix, key_size="r200_pix", rtn="index"
         )
 
-    #@profile
+
     @staticmethod
     def get_dipole_image(
         img: Type[SkyArray], cen_pix: tuple, extend_pix: int, extend_deg: float
@@ -473,7 +498,7 @@ class Dipoles:
         )
         return img_zoom
 
-    #@profile
+
     @staticmethod
     def get_single_transverse_velocity_from_sky(
         deltaTx: np.ndarray,
