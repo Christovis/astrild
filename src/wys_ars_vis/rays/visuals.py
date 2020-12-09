@@ -159,7 +159,7 @@ def maps_with_vel_field(
     return fig
 
 
-def dipole_maps(
+def simulated_dipole_maps(
     dipole_index: List[int],
     dipoles: pd.DataFrame,
     skymap: Union[str, np.ndarray],
@@ -259,6 +259,7 @@ def dipole_maps(
     axis[0].set_ylabel(r"$\theta_2 \quad $[deg]")
     return fig
 
+
 def dipole_cross_section(
     dipole_index: List[int],
     dipoles: pd.DataFrame,
@@ -307,4 +308,105 @@ def dipole_cross_section(
         )
         ax.set_ylabel(r"pixels")
     axis[0].set_ylabel(r"$\theta_2 \quad $[K]")
+    return fig
+
+
+def analytical_dipole_maps(
+    dipole_index: List[int],
+    dipoles: pd.DataFrame,
+    skymap: Union[str, np.ndarray],
+    extent: float,
+    theta: float = 20.,
+    arrow_scale: Optional[float] = None,
+) -> mpl.figure.Figure:
+    """
+    Plot analytical RS-map obtained from NFW profile.
+    """
+    fig, axis = plt.subplots(
+        1, len(dipole_index),
+        figsize=(16, 5),
+        facecolor="w", edgecolor="k",
+    )
+    
+    for idx, ax in enumerate(axis.reshape(-1)):
+        dip = dipoles[dipoles["index"] == dipole_index[idx]]
+        # Load Map
+        skyarray_x = SkyArray.from_dict_to_temperature_perturbation_map(
+            dip.r200_deg.values[0],
+            dip.m200.values[0],
+            dip.c_NFW.values[0],
+            dip.theta1_vel.values[0],
+            dip.Dc.values[0],
+            extent=20,
+            direction=0,
+            suppress=True,
+            suppression_R=10,
+        )
+        skyarray_y = SkyArray.from_dict_to_temperature_perturbation_map(
+            dip.r200_deg.values[0],
+            dip.m200.values[0],
+            dip.c_NFW.values[0],
+            dip.theta2_vel.values[0],
+            dip.Dc.values[0],
+            extent=20,
+            direction=1,
+            suppress=True,
+            suppression_R=10,
+        )
+        dt_map = skyarray_x.data["orig"] + skyarray_y.data["orig"]
+        ax.imshow(
+            dt_map * 1e6,
+            extent=[
+                dip.theta1_deg.values[0] - dip.r200_deg.values[0]*extent,
+                dip.theta1_deg.values[0] + dip.r200_deg.values[0]*extent,
+                dip.theta2_deg.values[0] - dip.r200_deg.values[0]*extent,
+                dip.theta2_deg.values[0] + dip.r200_deg.values[0]*extent,
+            ],
+            cmap=cm.RdBu_r,
+            origin="lower",
+            zorder=0,
+        )
+        ax.add_artist(
+            plt.Circle(
+                (dip.theta1_deg.values[0], dip.theta2_deg.values[0]),
+                dip.r200_deg.values[0],
+                fill=False,
+                #alpha=0.5,
+                color="lime",
+                #edgecolor="w",
+                linewidth=1,
+                zorder=1,
+            )
+        )
+        ax.quiver(
+            dip.theta1_deg.values[0], dip.theta2_deg.values[0],
+            dip.theta1_vel.values[0], dip.theta2_vel.values[0],
+            facecolor="k",
+            edgecolor="w",
+            scale=arrow_scale,
+            zorder=2,
+        )
+        ax.quiver(
+            dip.theta1_deg.values[0], dip.theta2_deg.values[0],
+            dip.theta1_mvel.values[0], dip.theta2_mvel.values[0],
+            facecolor="grey",
+            edgecolor="w",
+            scale=arrow_scale,
+            zorder=2,
+        )
+        ax.text(
+            dip.theta1_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
+            dip.theta2_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
+            "dip.idx = %.2f" % dipole_index[idx],
+            color='black', 
+            bbox=dict(
+                facecolor='w',
+                edgecolor='w',
+                alpha=0.8,
+                boxstyle='round,pad=0.5',
+            ),
+            zorder=3,
+        )
+        ax.set_xlabel(r"$\theta_1 \quad $[deg]")
+    axis[0].set_ylabel(r"$\theta_2 \quad $[deg]")
     return fig

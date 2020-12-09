@@ -54,6 +54,7 @@ class SkyArray:
         from_dataframe:
         from_array:
         from_dict_to_deflection_angle_map:
+        from_dict_to_temperature_perturbation_map:
         pdf:
         wl_peak_counts:
         add_galaxy_shape_noise:
@@ -184,7 +185,7 @@ class SkyArray:
         M_200c: float,
         c_200c: float,
         angu_diam_dist: Optional[float] = None,
-        extend: float = 1,
+        extent: float = 1,
         direction: int = 0,
         suppress: bool = False,
         suppression_R: float = 1,
@@ -202,7 +203,98 @@ class SkyArray:
             theta_200c: radius, [deg]
             M_200c: mass, [Msun]
             c_200c: concentration, [-]
-            extend: The size of the map from which the trans-vel is calculated
+            extent: The size of the map from which the trans-vel is calculated
+                in units of R200 of the associated halo.
+            suppress:
+            suppression_R:
+            angu_diam_dist: angular diameter distance, [Mpc]
+            direction: 0=(along x-axis), 1=(along y-axis)
+        """
+        alpha_map = cls.deflection_angle_map(
+            theta_200c,
+            M_200c,
+            c_200c,
+            angu_diam_dist,
+            extent,
+            direction,
+            suppress,
+            suppression_R,
+        )
+        opening_angle = 2 * theta_200c * extent
+        if direction == 0:
+            quantity = "alphax"
+        else:
+            quantity = "alphay"
+        return cls(alpha_map, opening_angle, quantity, dirs=None, map_file=None)
+    
+
+    @classmethod
+    def from_dict_to_temperature_perturbation_map(
+        cls,
+        theta_200c: float,
+        M_200c: float,
+        c_200c: float,
+        vel: float,
+        angu_diam_dist: Optional[float] = None,
+        extent: float = 1,
+        direction: int = 0,
+        suppress: bool = False,
+        suppression_R: float = 1,
+    ) -> "SkyArray":
+        """
+        The Rees-Sciama / Birkinshaw-Gull / moving cluster of galaxies effect.
+
+        Args:
+            vel: transverse to the line-of-sight velocity, [km/sec]
+
+        Returns:
+            Temperature perturbation map, \Delta T / T_CMB
+        """
+        alpha_map = cls.deflection_angle_map(
+            theta_200c,
+            M_200c,
+            c_200c,
+            angu_diam_dist,
+            extent,
+            direction,
+            suppress,
+            suppression_R,
+        )
+        dt_map = - alpha_map * vel / c_light
+        opening_angle = 2 * theta_200c * extent
+        if direction == 0:
+            quantity = "isw_rs_x"
+        else:
+            quantity = "isw_rs_y"
+        return cls(dt_map, opening_angle, quantity, dirs=None, map_file=None)
+    
+
+    @staticmethod
+    def deflection_angle_map(
+        theta_200c: float,
+        M_200c: float,
+        c_200c: float,
+        angu_diam_dist: Optional[float] = None,
+        extent: float = 1,
+        direction: int = 0,
+        suppress: bool = False,
+        suppression_R: float = 1,
+        npix: int = 100,
+    ) -> np.ndarray: 
+        """
+        Calculate the deflection angle of a halo with NFW profile using method
+        in described Sec. 3.2 in Baxter et al 2015 (1412.7521).
+
+        Note:
+            In this application it can be assumed that s_{SL}/s_{S}=1. Furthermore,
+            we can deglect vec{theta}/norm{theta} as it will be multiplied by the
+            same in the integral of Eq. 9 in Yasini et a. 2018 (1812.04241).
+        
+        Args:
+            theta_200c: radius, [deg]
+            M_200c: mass, [Msun]
+            c_200c: concentration, [-]
+            extent: The size of the map from which the trans-vel is calculated
                 in units of R200 of the associated halo.
             suppress:
             suppression_R:
@@ -210,9 +302,10 @@ class SkyArray:
             direction: 0=(along x-axis), 1=(along y-axis)
 
         Returns:
+            Deflection angle map.
         """
         R_200c = np.tan(theta_200c * np.pi / 180) * angu_diam_dist # [Mpc]
-        edges = np.linspace(0, R_200c*extend, pixel_nr) - R_200c * extend / 2
+        edges = np.linspace(0, R_200c*extent, npix) - R_200c * extent / 2
         thetax, thetay = np.meshgrid(edges, edges)
         R = np.sqrt(thetax ** 2 + thetay ** 2) # distances to pixels
         # Eq. 8
@@ -243,70 +336,8 @@ class SkyArray:
             suppress_radius = suppression_R * R_200c
             alpha_map *= np.exp(-(R / suppress_radius) ** 3)
 
-        opening_angle = 2 * theta_200c * extend
-        return cls(alpha_map, opening_angle, quantity, dirs=None, map_file=None)
+        return alpha_map.real
     
-
-    @classmethod
-    def from_dict_to_temperature_perturbation_map(
-        cls,
-        theta_200c: float,
-        M_200c: float,
-        c_200c: float,
-        vel: float,
-        angu_diam_dist: Optional[float] = None,
-        extend: float = 1,
-        direction: int = 0,
-        suppress: bool = False,
-        suppression_R: float = 1,
-    ) -> "SkyArray":
-        """
-        The Rees-Sciama / Birkinshaw-Gull / moving cluster of galaxies effect.
-
-        Args:
-            vel: transverse to the line-of-sight velocity, [km/sec]
-
-        Returns:
-            Temperature perturbation map, \Delta T / T_CMB
-        """
-        #TODO: unify with from_dict_to_deflection_angle_map
-        
-        R_200c = np.tan(theta_200c * np.pi / 180) * angu_diam_dist # [Mpc]
-        edges = np.linspace(0, R_200c*extend, pixel_nr) - R_200c * extend / 2
-        thetax, thetay = np.meshgrid(edges, edges)
-        R = np.sqrt(thetax ** 2 + thetay ** 2) # distances to pixels
-        # Eq. 8
-        A = M_200c * c_200c ** 2 / (
-            4. * np.pi * (np.log(1 + c_200c) - c_200c / (1 + c_200c))
-        )
-        # constant in Eq. 6
-        C = 16 * np.pi * Gcm2 * A / (c_200c * R_200c)
-        # argument for Eq. 7
-        x = (R * c_200c / R_200c).astype(np.complex)
-        # Eq. 7
-        f = np.true_divide(1, x) * (
-            np.log(x / 2) + 2 / np.sqrt(1 - x ** 2) * \
-            np.arctanh(np.sqrt(np.true_divide(1 - x, 1 + x)))
-        )
-        
-        # Eq. 6
-        if direction == 0:
-            quantity = "alphax"
-            thetax_hat = np.true_divide(thetax, R)
-            alpha_map = C * thetax_hat * f
-        else:
-            quantity = "alphay"
-            thetay_hat = np.true_divide(thetay, R)
-            alpha_map = C * thetay_hat * f
-        
-        dt_map = - alpha_map * vel / c_light.to("km/s").value
-
-        if suppress:  # suppress alpha at large radii
-            suppress_radius = suppression_R * R_200c
-            dt_map *= np.exp(-(R / suppress_radius) ** 3)
-
-        opening_angle = 2 * theta_200c * extend
-        return cls(dt_map, opening_angle, quantity, dirs=None, map_file=None)
 
     @property
     def npix(self) -> int:
@@ -381,7 +412,7 @@ class SkyArray:
             orig_data: What to do with data of the image to be processed:
                 e.g. no, shallow, or deep copy
         """
-        img = self._manage_img_data(of, img, orig_data)
+        img = self._manage_img_data(img, orig_data)
         img = transform.resize(img, (npix, npix), anti_aliasing=True)
         if rtn:
             return img
@@ -408,7 +439,11 @@ class SkyArray:
             orig_data: What to do with data of the image to be processed:
                 e.g. no, shallow, or deep copy
         """
-        img = self._manage_img_data(of, img, orig_data)
+        if of:
+            assert of in list(self.data.keys()), "Map does not exist."
+            img = self.data[of]
+        
+        img = self._manage_img_data(img, orig_data)
         xlimit = np.asarray(xlimit)
         ylimit = np.asarray(ylimit)
         assert np.diff(xlimit) == np.diff(ylimit), SkyArrayWarning("The whole class is currently designed for square images.")
@@ -445,7 +480,7 @@ class SkyArray:
             orig_data: What to do with data of the image to be processed:
                 e.g. no, shallow, or deep copy
         """
-        img = self._manage_img_data(of, img, orig_data)
+        img = self._manage_img_data(img, orig_data)
         npix = img.shape[0]
         edges = list(np.arange(0, npix, npix / ntiles)) + [npix]
         edges = np.array(
@@ -575,7 +610,7 @@ class SkyArray:
             ngal: Nr. density of galaxies, 40 for LSST; [arcmin^2]
             rnd_seed: Fix random seed, for reproducability.
         """
-        if self.quantity == "kappa_2":
+        if "kappa" in self.quantity:
             self.data["orig_gsn"] = self.data["orig"] + self.data["gsn"]
             return self.data["orig_gsn"]
         else:
@@ -629,7 +664,7 @@ class SkyArray:
         """
         Args:
         """
-        if self.quantity == "isw_rs":
+        if "isw" in self.quantity:
             if "cmb" not in self.data.keys():
                 self.create_cmb(filepath_cl, lmax, rnd_seed)
             _map = self.data[on] + self.data["cmb"]
@@ -669,7 +704,7 @@ class SkyArray:
             "kappa_1",
             "kappa_2",
         ], "Deflection angle can only be calculated from the kappa map"
-        img = self._manage_img_data(on, img, orig_data)
+        img = self._manage_img_data(img, orig_data)
 
         if npix is None: npix = self._npix
         if opening_angle is None: opening_angle = self._opening_angle
@@ -705,7 +740,7 @@ class SkyArray:
         assert self.quantity in [
             "alpha"
         ], "Shear can only be calculated from the deflection angle map"
-        img = self._manage_img_data(on, img, orig_data)
+        img = self._manage_img_data(img, orig_data)
         gamma_1, gamma_2 = SkyUtils.convert_deflection_to_shear(
             img, self._npix, self._opening_angle * un.deg
         )
