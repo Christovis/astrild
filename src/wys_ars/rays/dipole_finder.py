@@ -384,7 +384,6 @@ class Dipoles:
         assert "alphax" in list(skyarrays.keys())
 
         def integration(dip: pd.Series,) -> tuple:
-            print("------------->", dip.theta1_pix, dip.theta2_pix)
             # get image which will be integrated to find dipole transverse vel.
             deltaTmap_zoom = self.get_dipole_image(
                 skyarrays["isw_rs"],
@@ -491,7 +490,6 @@ class Dipoles:
         ylim = np.array(
             [cen_pix[0] - extend_pix, cen_pix[0] + extend_pix]
         ).astype(int)
-        print("-->", img.data)
         img_zoom = SkyArray.from_array(
             img.crop(xlim, ylim, of="orig", rtn=True),
             opening_angle=2 * extend_deg,

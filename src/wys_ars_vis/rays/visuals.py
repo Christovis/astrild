@@ -331,31 +331,19 @@ def analytical_dipole_maps(
     for idx, ax in enumerate(axis.reshape(-1)):
         dip = dipoles[dipoles["index"] == dipole_index[idx]]
         # Load Map
-        skyarray_x = SkyArray.from_dict_to_temperature_perturbation_map(
+        dt_map = SkyArray.from_dict_to_temperature_perturbation_map(
             dip.r200_deg.values[0],
             dip.m200.values[0],
             dip.c_NFW.values[0],
-            dip.theta1_vel.values[0],
-            dip.Dc.values[0],
+            [dip.theta1_vel.values[0], dip.theta2_vel.values[0]],
+            dip.rad_dist.values[0],
             extent=20,
-            direction=0,
+            direction=[0, 1],
             suppress=True,
             suppression_R=10,
         )
-        skyarray_y = SkyArray.from_dict_to_temperature_perturbation_map(
-            dip.r200_deg.values[0],
-            dip.m200.values[0],
-            dip.c_NFW.values[0],
-            dip.theta2_vel.values[0],
-            dip.Dc.values[0],
-            extent=20,
-            direction=1,
-            suppress=True,
-            suppression_R=10,
-        )
-        dt_map = skyarray_x.data["orig"] + skyarray_y.data["orig"]
         ax.imshow(
-            dt_map * 1e6,
+            dt_map.data["orig"] * 1e6,
             extent=[
                 dip.theta1_deg.values[0] - dip.r200_deg.values[0]*extent,
                 dip.theta1_deg.values[0] + dip.r200_deg.values[0]*extent,
@@ -382,14 +370,6 @@ def analytical_dipole_maps(
             dip.theta1_deg.values[0], dip.theta2_deg.values[0],
             dip.theta1_vel.values[0], dip.theta2_vel.values[0],
             facecolor="k",
-            edgecolor="w",
-            scale=arrow_scale,
-            zorder=2,
-        )
-        ax.quiver(
-            dip.theta1_deg.values[0], dip.theta2_deg.values[0],
-            dip.theta1_mvel.values[0], dip.theta2_mvel.values[0],
-            facecolor="grey",
             edgecolor="w",
             scale=arrow_scale,
             zorder=2,

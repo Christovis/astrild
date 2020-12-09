@@ -186,9 +186,10 @@ class SkyArray:
         c_200c: float,
         angu_diam_dist: Optional[float] = None,
         extent: float = 1,
-        direction: int = 0,
+        direction: List[int] = [0, 1],
         suppress: bool = False,
         suppression_R: float = 1,
+        npix: int = 100,
     ) -> "SkyArray":
         """
         Calculate the deflection angle of a halo with NFW profile using method
@@ -208,18 +209,22 @@ class SkyArray:
             suppress:
             suppression_R:
             angu_diam_dist: angular diameter distance, [Mpc]
-            direction: 0=(along x-axis), 1=(along y-axis)
+            direction: 0=(along x-axis), 1=(along y-axis), if 0 and 1 are given
+                the sum of both maps is returned.
         """
-        alpha_map = cls.deflection_angle_map(
-            theta_200c,
-            M_200c,
-            c_200c,
-            angu_diam_dist,
-            extent,
-            direction,
-            suppress,
-            suppression_R,
-        )
+        alpha_map = np.zeros((npix, npix))
+        for direc in direction:
+            alpha_map += cls.deflection_angle_map(
+                theta_200c,
+                M_200c,
+                c_200c,
+                angu_diam_dist,
+                extent,
+                direction,
+                suppress,
+                suppression_R,
+                npix,
+            )
         opening_angle = 2 * theta_200c * extent
         if direction == 0:
             quantity = "alphax"
@@ -234,12 +239,13 @@ class SkyArray:
         theta_200c: float,
         M_200c: float,
         c_200c: float,
-        vel: float,
+        vel: Union[list, tuple, np.ndarray],
         angu_diam_dist: Optional[float] = None,
         extent: float = 1,
-        direction: int = 0,
+        direction: List[int] = [0, 1],
         suppress: bool = False,
         suppression_R: float = 1,
+        npix: int = 100,
     ) -> "SkyArray":
         """
         The Rees-Sciama / Birkinshaw-Gull / moving cluster of galaxies effect.
@@ -250,17 +256,20 @@ class SkyArray:
         Returns:
             Temperature perturbation map, \Delta T / T_CMB
         """
-        alpha_map = cls.deflection_angle_map(
-            theta_200c,
-            M_200c,
-            c_200c,
-            angu_diam_dist,
-            extent,
-            direction,
-            suppress,
-            suppression_R,
-        )
-        dt_map = - alpha_map * vel / c_light
+        dt_map = np.zeros((npix, npix))
+        for direc in direction:
+            alpha_map = cls.deflection_angle_map(
+                theta_200c,
+                M_200c,
+                c_200c,
+                angu_diam_dist,
+                extent,
+                direc,
+                suppress,
+                suppression_R,
+                npix,
+            )
+            dt_map += - alpha_map * vel[direc] / c_light
         opening_angle = 2 * theta_200c * extent
         if direction == 0:
             quantity = "isw_rs_x"
