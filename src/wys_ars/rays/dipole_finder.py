@@ -346,19 +346,24 @@ class Dipoles:
                 distances[nan_idx] = -99999
         return list(distances), list(ids)
 
-    
-    def _get_cpu_nr(self, ncpus: int) -> None:
-        """ Setting the nr. of cpus to use """
+
+    @property
+    def ncpus(self):
+        return self._ncpus
+
+
+    @ncpus.setter
+    def ncpus(self, val: int):
         if (ncpus == 0) or (ncpus < -1):
             raise ValueError(
-                f"ncpus={ncpus} is not valid. Please enter a value "
-                + ">0 for ncpus or -1 to use all available cores."
+                f"ncpus={ncpus} is not valid. Please enter a value " +\
+                ">0 for ncpus or -1 to use all available cores."
             )
         elif ncpus == -1:
             self._ncpus = ncpus_available
         else:
-            self._ncpus = ncpus
-
+            self._ncpus = val
+    
     
     def get_transverse_velocities_from_sky(
         self,
@@ -445,7 +450,6 @@ class Dipoles:
             self.data["theta2_mvel"] = _array_of_failures
         
         else:
-            self._get_cpu_nr(ncpus)
             print(
                 f"Calculate the trans. vel. of {len(dip_index)} dipoles " +\
                 f"with {self._ncpus} cpus"

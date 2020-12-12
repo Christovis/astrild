@@ -6,8 +6,11 @@ from importlib import import_module
 
 import pandas as pd
 import numpy as np
+import numba as nb
 from skimage import transform
-from scipy.interpolate import RectBivariateSpline
+
+from joblib import Parallel, delayed
+from multiprocessing import cpu_count
 
 import astropy
 from astropy.constants import sigma_T, m_p, c
@@ -18,9 +21,13 @@ from lenstools import ConvergenceMap
 #import pymaster as nmt
 
 from wys_ars.rays.utils import Filters
-from wys_ars.rays.skys.sky_utils import SkyUtils
+from wys_ars.rays.skys.sky_utils import SkyUtils, SkyNumbaUtils
 from wys_ars.rays.skyio import SkyIO
 from wys_ars.io import IO
+
+#import matplotlib as mpl
+#mpl.use('Agg')
+#import matplotlib.pyplot as plt
 
 dir_src = Path(__file__).parent.parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
@@ -30,6 +37,9 @@ m_p = m_p.to(un.M_sun).value #[M_sun]
 c_light = c.to("km/s").value
 T_cmb = 2.7251 #[K]
 Gcm2 = 4.785E-20 # G/c^2 (Mpc/M_sun)
+
+# store available nr. of cpus for parallel computation
+ncpus_available = cpu_count()
 
 class SkyArrayWarning(BaseException):
     pass
@@ -53,8 +63,8 @@ class SkyArray:
         from_file:
         from_dataframe:
         from_array:
-        from_dict_to_deflection_angle_map:
-        from_dict_to_temperature_perturbation_map:
+        from_halo_to_deflection_angle_map:
+        from_halo_to_temperature_perturbation_map:
         pdf:
         wl_peak_counts:
         add_galaxy_shape_noise:
@@ -179,17 +189,17 @@ class SkyArray:
     
 
     @classmethod
-    def from_dict_to_deflection_angle_map(
+    def from_halo_to_deflection_angle_map(
         cls,
         theta_200c: float,
         M_200c: float,
         c_200c: float,
         angu_diam_dist: Optional[float] = None,
+        npix: int = 100,
         extent: float = 1,
         direction: List[int] = [0, 1],
         suppress: bool = False,
         suppression_R: float = 1,
-        npix: int = 100,
     ) -> "SkyArray":
         """
         Calculate the deflection angle of a halo with NFW profile using method
@@ -212,21 +222,21 @@ class SkyArray:
             direction: 0=(along x-axis), 1=(along y-axis), if 0 and 1 are given
                 the sum of both maps is returned.
         """
-        alpha_map = np.zeros((npix, npix))
-        for direc in direction:
-            alpha_map += cls.deflection_angle_map(
-                theta_200c,
-                M_200c,
-                c_200c,
-                angu_diam_dist,
-                extent,
-                direction,
-                suppress,
-                suppression_R,
-                npix,
-            )
+        alpha_map = SkyUtils.NFW_deflection_angle_map(
+            theta_200c,
+            M_200c,
+            c_200c,
+            angu_diam_dist,
+            npix,
+            extent,
+            direction,
+            suppress,
+            suppression_R,
+        )
         opening_angle = 2 * theta_200c * extent
-        if direction == 0:
+        if 1 in direction and 0 in direction:
+            quantity = "alpha"
+        elif 0 in direction:
             quantity = "alphax"
         else:
             quantity = "alphay"
@@ -234,7 +244,7 @@ class SkyArray:
     
 
     @classmethod
-    def from_dict_to_temperature_perturbation_map(
+    def from_halo_to_temperature_perturbation_map(
         cls,
         theta_200c: float,
         M_200c: float,
@@ -246,6 +256,7 @@ class SkyArray:
         suppress: bool = False,
         suppression_R: float = 1,
         npix: int = 100,
+        ncpus: int = 1,
     ) -> "SkyArray":
         """
         The Rees-Sciama / Birkinshaw-Gull / moving cluster of galaxies effect.
@@ -256,97 +267,109 @@ class SkyArray:
         Returns:
             Temperature perturbation map, \Delta T / T_CMB
         """
-        dt_map = np.zeros((npix, npix))
-        for direc in direction:
-            alpha_map = cls.deflection_angle_map(
-                theta_200c,
-                M_200c,
-                c_200c,
-                angu_diam_dist,
-                extent,
-                direc,
-                suppress,
-                suppression_R,
-                npix,
-            )
-            dt_map += - alpha_map * vel[direc] / c_light
+        dt_map = SkyUtils.NFW_deflection_angle_map(
+            theta_200c,
+            M_200c,
+            c_200c,
+            angu_diam_dist,
+            npix,
+            extent,
+            direction,
+            suppress,
+            suppression_R,
+        )
         opening_angle = 2 * theta_200c * extent
-        if direction == 0:
+        if 1 in direction and 0 in direction:
+            quantity = "isw_rs"
+        elif 0 in direction:
             quantity = "isw_rs_x"
         else:
             quantity = "isw_rs_y"
         return cls(dt_map, opening_angle, quantity, dirs=None, map_file=None)
     
 
-    @staticmethod
-    def deflection_angle_map(
-        theta_200c: float,
-        M_200c: float,
-        c_200c: float,
-        angu_diam_dist: Optional[float] = None,
+    @classmethod
+    def from_halo_catalogue_to_temperature_perturbation_map(
+        cls,
+        halo_cat: pd.DataFrame,
         extent: float = 1,
-        direction: int = 0,
+        direction: List[int] = [0, 1],
         suppress: bool = False,
         suppression_R: float = 1,
-        npix: int = 100,
-    ) -> np.ndarray: 
+        npix: int = 8192,
+        opening_angle: float = 20.,
+        ncpus: int = 1,
+    ) -> "SkyArray":
         """
-        Calculate the deflection angle of a halo with NFW profile using method
-        in described Sec. 3.2 in Baxter et al 2015 (1412.7521).
+        The Rees-Sciama / Birkinshaw-Gull / moving cluster of galaxies effect.
 
-        Note:
-            In this application it can be assumed that s_{SL}/s_{S}=1. Furthermore,
-            we can deglect vec{theta}/norm{theta} as it will be multiplied by the
-            same in the integral of Eq. 9 in Yasini et a. 2018 (1812.04241).
-        
         Args:
-            theta_200c: radius, [deg]
-            M_200c: mass, [Msun]
-            c_200c: concentration, [-]
-            extent: The size of the map from which the trans-vel is calculated
-                in units of R200 of the associated halo.
-            suppress:
-            suppression_R:
-            angu_diam_dist: angular diameter distance, [Mpc]
-            direction: 0=(along x-axis), 1=(along y-axis)
+            vel: transverse to the line-of-sight velocity, [km/sec]
 
         Returns:
-            Deflection angle map.
+            Temperature perturbation map, \Delta T / T_CMB
         """
-        R_200c = np.tan(theta_200c * np.pi / 180) * angu_diam_dist # [Mpc]
-        edges = np.linspace(0, R_200c*extent, npix) - R_200c * extent / 2
-        thetax, thetay = np.meshgrid(edges, edges)
-        R = np.sqrt(thetax ** 2 + thetay ** 2) # distances to pixels
-        # Eq. 8
-        A = M_200c * c_200c ** 2 / (
-            4. * np.pi * (np.log(1 + c_200c) - c_200c / (1 + c_200c))
-        )
-        # constant in Eq. 6
-        C = 16 * np.pi * Gcm2 * A / (c_200c * R_200c)
-        # argument for Eq. 7
-        x = (R * c_200c / R_200c).astype(np.complex)
-        # Eq. 7
-        f = np.true_divide(1, x) * (
-            np.log(x / 2) + 2 / np.sqrt(1 - x ** 2) * \
-            np.arctanh(np.sqrt(np.true_divide(1 - x, 1 + x)))
-        )
+        map_array = np.zeros((npix, npix))
         
-        # Eq. 6
-        if direction == 0:
-            quantity = "alphax"
-            thetax_hat = np.true_divide(thetax, R)
-            alpha_map = C * thetax_hat * f
+        halo_dict = halo_cat[[
+            "r200_deg",
+            "r200_pix",
+            "m200",
+            "c_NFW",
+            "rad_dist",
+            "theta1_pix",
+            "theta2_pix",
+            "theta1_vel",
+            "theta2_vel",
+        ]].to_dict(orient='list')
+        halo_idx = range(len(halo_dict["m200"]))
+        
+        if ncpus == 1:
+            map_array = SkyUtils.analytic_Halo_signal_to_SkyArray(
+                halo_idx, halo_dict, map_array, extent, direction, suppress, suppression_R,
+            )
         else:
-            quantity = "alphay"
-            thetay_hat = np.true_divide(thetay, R)
-            alpha_map = C * thetay_hat * f
+            halo_idx_batches = np.array_split(halo_idx, ncpus)
+            map_sub_arrays = Parallel(n_jobs=ncpus, require='sharedmem')(
+                delayed(SkyUtils.analytic_Halo_signal_to_SkyArray)(
+                    halo_idx_batch,
+                    halo_dict,
+                    map_array,
+                    extent,
+                    direction,
+                    suppress,
+                    suppression_R,
+                ) for halo_idx_batch in halo_idx_batches
+            )
+            map_array = sum(map_sub_arrays)
+            print(type(map_array), map_array.shape, map_array.min(), map_array.max())
 
-        if suppress:  # suppress alpha at large radii
-            suppress_radius = suppression_R * R_200c
-            alpha_map *= np.exp(-(R / suppress_radius) ** 3)
-
-        return alpha_map.real
+        if 1 in direction and 0 in direction:
+            quantity = "isw_rs"
+        elif 0 in direction:
+            quantity = "isw_rs_x"
+        else:
+            quantity = "isw_rs_y"
+        return cls(map_array, opening_angle, quantity, dirs=None, map_file=None)
+  
     
+    @property
+    def ncpus(self):
+        return self._ncpus
+
+
+    @ncpus.setter
+    def ncpus(self, val: int):
+        if (ncpus == 0) or (ncpus < -1):
+            raise ValueError(
+                f"ncpus={ncpus} is not valid. Please enter a value " +\
+                ">0 for ncpus or -1 to use all available cores."
+            )
+        elif ncpus == -1:
+            self._ncpus = ncpus_available
+        else:
+            self._ncpus = val
+
 
     @property
     def npix(self) -> int:
@@ -585,8 +608,7 @@ class SkyArray:
         self, std: float, ngal: float, rnd_seed: Optional[int] = None
     ) -> None:
         """
-        Galaxy Shape Noise (GSN)
-        e.g.: https://arxiv.org/pdf/1907.06657.pdf
+        Galaxy Shape Noise (GSN), e.g.: arxiv:1907.06657
 
         Args:
             std: dispersion of source galaxy intrinsic ellipticity, 0.4 for LSST
