@@ -25,10 +25,6 @@ from wys_ars.rays.skys.sky_utils import SkyUtils, SkyNumbaUtils
 from wys_ars.rays.skyio import SkyIO
 from wys_ars.io import IO
 
-#import matplotlib as mpl
-#mpl.use('Agg')
-#import matplotlib.pyplot as plt
-
 dir_src = Path(__file__).parent.parent.absolute()
 default_config_file_ray = dir_src / "configs/ray_snapshot_info.h5"
 
@@ -267,10 +263,11 @@ class SkyArray:
         Returns:
             Temperature perturbation map, \Delta T / T_CMB
         """
-        dt_map = SkyUtils.NFW_deflection_angle_map(
+        dt_map = SkyUtils.NFW_temperature_perturbation_map(
             theta_200c,
             M_200c,
             c_200c,
+            vel,
             angu_diam_dist,
             npix,
             extent,
@@ -309,8 +306,6 @@ class SkyArray:
         Returns:
             Temperature perturbation map, \Delta T / T_CMB
         """
-        map_array = np.zeros((npix, npix))
-        
         halo_dict = halo_cat[[
             "r200_deg",
             "r200_pix",
@@ -326,23 +321,25 @@ class SkyArray:
         
         if ncpus == 1:
             map_array = SkyUtils.analytic_Halo_signal_to_SkyArray(
-                halo_idx, halo_dict, map_array, extent, direction, suppress, suppression_R,
+                halo_idx, halo_dict, extent, direction, suppress, suppression_R, npix
             )
+            print("---->", np.percentile(map_array, 0.16), np.percentile(map_array, 0.84))
         else:
             halo_idx_batches = np.array_split(halo_idx, ncpus)
-            map_sub_arrays = Parallel(n_jobs=ncpus, require='sharedmem')(
+            map_sub_arrays = Parallel(n_jobs=ncpus)(
                 delayed(SkyUtils.analytic_Halo_signal_to_SkyArray)(
                     halo_idx_batch,
                     halo_dict,
-                    map_array,
                     extent,
                     direction,
                     suppress,
                     suppression_R,
+                    npix,
                 ) for halo_idx_batch in halo_idx_batches
             )
             map_array = sum(map_sub_arrays)
-            print(type(map_array), map_array.shape, map_array.min(), map_array.max())
+            print("---->", np.percentile(map_array, 0.16), np.percentile(map_array, 0.84))
+        map_array[np.isinf(map_array)] = 0.
 
         if 1 in direction and 0 in direction:
             quantity = "isw_rs"

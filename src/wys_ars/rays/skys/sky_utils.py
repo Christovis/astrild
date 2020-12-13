@@ -79,29 +79,34 @@ class SkyUtils:
     def analytic_Halo_signal_to_SkyArray(
         halo_idx: np.array,
         halo_cat: dict,
-        map_array: np.ndarray,
         extent: int,
         direction: list,
         suppress: bool,
         suppression_R: float,
+        npix: int,
     ) -> np.ndarray:
-        dt_func = partial(
-            SkyUtils.NFW_temperature_perturbation_map,
-            extent=extent,
-            direction=direction,
-            suppress=suppress,
-            suppression_R=suppression_R,
-        )
+        map_array = np.zeros((npix, npix))
+        #dt_func = partial(
+        #    SkyUtils.NFW_temperature_perturbation_map,
+        #    extent=extent,
+        #    direction=direction,
+        #    suppress=suppress,
+        #    suppression_R=suppression_R,
+        #)
         for idx in halo_idx:
-            map_halo = dt_func(
+            map_halo = SkyUtils.NFW_temperature_perturbation_map(
                 halo_cat["r200_deg"][idx],
                 halo_cat["m200"][idx],
                 halo_cat["c_NFW"][idx],
                 vel = (halo_cat["theta1_vel"][idx], halo_cat["theta2_vel"][idx]),
                 angu_diam_dist = halo_cat["rad_dist"][idx] * 0.6774,
                 npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
+                extent=extent,
+                direction=direction,
+                suppress=suppress,
+                suppression_R=suppression_R,
             )
-            map_array += SkyUtils.add_patch_to_map(
+            map_array = SkyUtils.add_patch_to_map(
                 map_array,
                 map_halo,
                 (halo_cat["theta1_pix"][idx], halo_cat["theta2_pix"][idx]),
@@ -126,8 +131,8 @@ class SkyUtils:
             the large image
         x,y-lim: pixel coordinates for the large image
         """
-        assert limg.flags['C_CONTIGUOUS']
-        assert simg.flags['C_CONTIGUOUS']
+        #assert limg.flags['C_CONTIGUOUS']
+        #assert simg.flags['C_CONTIGUOUS']
         rad = int(len(simg)/2)
         xedges = np.arange(cen_pix[0] - rad, cen_pix[0] + rad + 1)
         yedges = np.arange(cen_pix[1] - rad, cen_pix[1] + rad + 1)
@@ -217,25 +222,23 @@ class SkyUtils:
         """
         assert np.sum(direction) <= 1, "Only 0 and 1 are valid direction indications."
         R_200c = np.tan(theta_200c * np.pi / 180) * angu_diam_dist # [Mpc]
+
         edges = np.linspace(0, 2*R_200c*extent, npix) - R_200c * extent
         thetax, thetay = np.meshgrid(edges, edges)
         R = np.sqrt(thetax ** 2 + thetay ** 2) # distances to pixels
-        R[R == 0.] = 1e-30  # avoid divide by zero warning
         # Eq. 8
-        A = M_200c * c_200c ** 2 / (
-            4. * np.pi * (np.log(1 + c_200c) - c_200c / (1 + c_200c))
-        )
+        A = M_200c * c_200c ** 2 / (np.log(1 + c_200c) - c_200c / (1 + c_200c)) / 4. / np.pi
         # constant in Eq. 6
-        C = 16 * np.pi * Gcm2 * A / (c_200c * R_200c)
-        # argument for Eq. 7
-        x = (R * c_200c / R_200c).astype(np.complex)
+        C = 16 * np.pi * Gcm2 * A / c_200c / R_200c
+
+        R_s = R_200c / c_200c
+        x = R / R_s
+        x = x.astype(np.complex)
         # Eq. 7
         f = np.true_divide(1, x) * (
             np.log(x / 2) + 2 / np.sqrt(1 - x ** 2) * \
             np.arctanh(np.sqrt(np.true_divide(1 - x, 1 + x)))
         )
-        f = np.nan_to_num(f, nan=0.)
-        assert np.isnan(f).any() == False, "Why is there Nan in f ?!"
         alpha_map = np.zeros((npix, npix)).astype(np.complex)
         for direc in direction:
             # Eq. 6
@@ -245,11 +248,13 @@ class SkyUtils:
             elif direc == 1:
                 thetay_hat = np.true_divide(thetay, R)
                 alpha_map += C * thetay_hat * f
+        alpha_map = np.nan_to_num(alpha_map, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         if suppress:  # suppress alpha at large radii
             suppress_radius = suppression_R * R_200c
             alpha_map *= np.exp(-(R / suppress_radius) ** 3)
-        return alpha_map.real
-
+        alpha_map = alpha_map.real
+        alpha_map[abs(alpha_map) > 100] = 0.  # avoid unphysical results
+        return alpha_map
 
     def convert_code_to_phy_units(
         quantity: str, map_df: pd.DataFrame
