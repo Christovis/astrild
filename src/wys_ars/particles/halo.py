@@ -54,7 +54,9 @@ class Halos:
     ):
         self.data = halos
         self.sim = simulation
-        if "fof" in list(self.sim.files.keys()):
+        if hasattr(self.sim, "files") == False:
+            self.halotype = None
+        elif "fof" in list(self.sim.files.keys()):
             self.halotype = "Arepo"
         elif "halos" in list(self.sim.files.keys()):
             self.halotype = "Rockstar"
