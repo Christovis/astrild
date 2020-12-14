@@ -43,10 +43,12 @@ class SkyArrayWarning(BaseException):
 
 class SkyArray:
     """
-    The sky-map is constructed through multiple ray-tracing simulations
-    run with RayRamses. This class analyzes the 2D map that contains
-    the summes pertrurbations of each ray. It can prepare the data for the
-    search of voids and peaks.
+    The sky-map contains either:
+        - results of ray-tracing simulations run with RayRamses
+        - results of analytical dT and deflection angle results for NFW halos
+
+    This class analyzes the 2D map that contains the summes pertrurbations
+    of each ray. It can prepare the data for the search of voids and peaks.
 
     Attributes:
         skymap:
@@ -59,8 +61,8 @@ class SkyArray:
         from_file:
         from_dataframe:
         from_array:
-        from_halo_to_deflection_angle_map:
-        from_halo_to_temperature_perturbation_map:
+        from_halo_series:
+        from_halo_dataframe:
         pdf:
         wl_peak_counts:
         add_galaxy_shape_noise:
@@ -185,20 +187,19 @@ class SkyArray:
     
 
     @classmethod
-    def from_halo_to_deflection_angle_map(
+    def from_halo_series(
         cls,
-        theta_200c: float,
-        M_200c: float,
-        c_200c: float,
-        angu_diam_dist: Optional[float] = None,
+        halo: pd.Series,
         npix: int = 100,
         extent: float = 1,
         direction: List[int] = [0, 1],
         suppress: bool = False,
         suppression_R: float = 1,
+        to: str = "dT",
     ) -> "SkyArray":
         """
-        Calculate the deflection angle of a halo with NFW profile using method
+        Calculate the deflection angle of Rees-Sciama / Birkinshaw-Gull / 
+        moving cluster of galaxies effect of a halo with NFW profile using method
         in described Sec. 3.2 in Baxter et al 2015 (1412.7521).
 
         Note:
@@ -217,72 +218,99 @@ class SkyArray:
             angu_diam_dist: angular diameter distance, [Mpc]
             direction: 0=(along x-axis), 1=(along y-axis), if 0 and 1 are given
                 the sum of both maps is returned.
+            to: Indicates whether 2nd order temperature perturbation of Ree-Sciama
+                effect or deflection angle map will be created, [dT, alpha]
         """
-        alpha_map = SkyUtils.NFW_deflection_angle_map(
-            theta_200c,
-            M_200c,
-            c_200c,
-            angu_diam_dist,
-            npix,
-            extent,
-            direction,
-            suppress,
-            suppression_R,
-        )
-        opening_angle = 2 * theta_200c * extent
-        if 1 in direction and 0 in direction:
+        halo_dict = {
+            "theta_200c": halo.r200_deg,
+            "M_200c": halo.m200,
+            "c_200c": halo.c_NFW,
+            "angu_diam_dist": halo.rad_dist,
+        }
+
+        # set quantity label of SkyArray and method variable
+        if to == "dT":
+            quantity = "rs"
+            get_analytical_map = SkyUtils.NFW_temperature_perturbation_map
+            halo_dict["vel"] = [halo.theta1_vel, halo.theta2_vel]
+        elif to == "alpha":
             quantity = "alpha"
-        elif 0 in direction:
-            quantity = "alphax"
+            get_analytical_map = SkyUtils.NFW_deflection_angle_map
         else:
-            quantity = "alphay"
-        return cls(alpha_map, opening_angle, quantity, dirs=None, map_file=None)
+            SkyArrayWarning("The routine for this quantity is not implemented")
+        
+        # place directional indicator in SkyArray quantity label
+        if 1 in direction and 0 in direction:
+            pass
+        elif 0 in direction:
+            quantity += "_x"
+        else:
+            quantity += "_y"
+        
+        map_array = get_analytical_map(
+            **halo_dict,
+            npix=npix,
+            extent=extent,
+            direction=direction,
+            suppress=suppress,
+            suppression_R=suppression_R,
+        )
+        opening_angle = 2 * halo.r200_deg * extent
+        return cls(map_array, opening_angle, quantity, dirs=None, map_file=None)
     
 
     @classmethod
-    def from_halo_to_temperature_perturbation_map(
+    def from_halo_dataframe_to_deflection_angle_map(
         cls,
-        theta_200c: float,
-        M_200c: float,
-        c_200c: float,
-        vel: Union[list, tuple, np.ndarray],
-        angu_diam_dist: Optional[float] = None,
+        halo_cat: Union[pd.DataFrame, pd.Series],
         extent: float = 1,
         direction: List[int] = [0, 1],
         suppress: bool = False,
         suppression_R: float = 1,
-        npix: int = 100,
+        npix: int = 8192,
+        opening_angle: float = 20.,
         ncpus: int = 1,
     ) -> "SkyArray":
         """
-        The Rees-Sciama / Birkinshaw-Gull / moving cluster of galaxies effect.
-
-        Args:
-            vel: transverse to the line-of-sight velocity, [km/sec]
-
-        Returns:
-            Temperature perturbation map, \Delta T / T_CMB
         """
-        dt_map = SkyUtils.NFW_temperature_perturbation_map(
-            theta_200c,
-            M_200c,
-            c_200c,
-            vel,
-            angu_diam_dist,
-            npix,
-            extent,
-            direction,
-            suppress,
-            suppression_R,
-        )
-        opening_angle = 2 * theta_200c * extent
-        if 1 in direction and 0 in direction:
-            quantity = "isw_rs"
-        elif 0 in direction:
-            quantity = "isw_rs_x"
+        halo_dict = halo_cat[[
+            "r200_deg",
+            "r200_pix",
+            "m200",
+            "c_NFW",
+            "rad_dist",
+            "theta1_pix",
+            "theta2_pix",
+        ]].to_dict(orient='list')
+        halo_idx = range(len(halo_dict["m200"]))
+        
+        if ncpus == 1:
+            map_array = SkyUtils.analytic_Halo_signal_to_SkyArray(
+                halo_idx, halo_dict, extent, direction, suppress, suppression_R, npix
+            )
         else:
-            quantity = "isw_rs_y"
-        return cls(dt_map, opening_angle, quantity, dirs=None, map_file=None)
+            halo_idx_batches = np.array_split(halo_idx, ncpus)
+            map_sub_arrays = Parallel(n_jobs=ncpus)(
+                delayed(SkyUtils.analytic_Halo_signal_to_SkyArray)(
+                    halo_idx_batch,
+                    halo_dict,
+                    extent,
+                    direction,
+                    suppress,
+                    suppression_R,
+                    npix,
+                ) for halo_idx_batch in halo_idx_batches
+            )
+            map_array = sum(map_sub_arrays)
+        map_array[np.isinf(map_array)] = 0.
+
+        if 1 in direction and 0 in direction:
+            quantity = "alpha"
+        elif 0 in direction:
+            quantity = "alpha_x"
+        else:
+            quantity = "alpha_y"
+        return cls(map_array, opening_angle, quantity, dirs=None, map_file=None)
     
 
     @classmethod
@@ -323,7 +351,6 @@ class SkyArray:
             map_array = SkyUtils.analytic_Halo_signal_to_SkyArray(
                 halo_idx, halo_dict, extent, direction, suppress, suppression_R, npix
             )
-            print("---->", np.percentile(map_array, 0.16), np.percentile(map_array, 0.84))
         else:
             halo_idx_batches = np.array_split(halo_idx, ncpus)
             map_sub_arrays = Parallel(n_jobs=ncpus)(
@@ -338,7 +365,6 @@ class SkyArray:
                 ) for halo_idx_batch in halo_idx_batches
             )
             map_array = sum(map_sub_arrays)
-            print("---->", np.percentile(map_array, 0.16), np.percentile(map_array, 0.84))
         map_array[np.isinf(map_array)] = 0.
 
         if 1 in direction and 0 in direction:

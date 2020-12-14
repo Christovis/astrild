@@ -380,34 +380,46 @@ class Dipoles:
         Args:
             skyarrays: Dictionary must contains SkyArray instances of
                 unfiltered isw-rs map [-] and deflection angle map [rad].
+                The maps can contain either the individual x,y-components
+                of the vector fields or their sum.
             filter_dsc_x,y: Dictionary of filters applied to cropped map
                 in x,y-direction.
             extend: The size of the map from which the trans-vel is calculated
                 in units of R200 of the associated halo.
         """
         assert "isw_rs" in list(skyarrays.keys())
-        assert "alphax" in list(skyarrays.keys())
+        assert "alpha" in list(skyarrays.keys())
+        
+        def copy_or_sort_keys(keys: str, get: str) -> list:
+            _kk = [k for k in keys if get in k]
+            if len(_kk) == 1:
+                keys_f = [_kk[0]] * 2
+            else:
+                # make sure that the list contains first
+                # the _x and then _y component
+                keys_f = sorted(_kk)
+            return keys_f
 
         def integration(dip: pd.Series,) -> tuple:
-            # get image which will be integrated to find dipole transverse vel.
-            deltaTmap_zoom = self.get_dipole_image(
-                skyarrays["isw_rs"],
-                (dip.theta1_pix, dip.theta2_pix),
-                dip.r200_pix * extend,
-                dip.r200_deg * extend,
-            )
-            alphax_zoom = self.get_dipole_image(
-                skyarrays["alphax"],
-                (dip.theta1_pix, dip.theta2_pix),
-                dip.r200_pix * extend,
-                dip.r200_deg * extend,
-            )
-            alphay_zoom = self.get_dipole_image(
-                skyarrays["alphay"],
-                (dip.theta1_pix, dip.theta2_pix),
-                dip.r200_pix * extend,
-                dip.r200_deg * extend,
-            )
+            # get image which will be integrated to find dipole transverse vel
+            dT_zoom = [
+                self.get_dipole_image(
+                    skyarrays[k],
+                    (dip.theta1_pix, dip.theta2_pix),
+                    dip.r200_pix * extend,
+                    dip.r200_deg * extend,
+                )
+                for k in keys_isw_rs
+            ]
+            alpha_zoom = [
+                self.get_dipole_image(
+                    skyarrays[k],
+                    (dip.theta1_pix, dip.theta2_pix),
+                    dip.r200_pix * extend,
+                    dip.r200_deg * extend,
+                )
+                for k in keys_alpha
+            ]
             # filter images to remove CMB+Noise and enhance dipole signal
             filter_dsc_x["gaussian_first_derivative"]["theta_i"] = (
                 2 * dip.r200_deg * un.deg
@@ -415,25 +427,20 @@ class Dipoles:
             filter_dsc_y["gaussian_first_derivative"]["theta_i"] = (
                 2 * dip.r200_deg * un.deg
             )
-            deltaTmap_zoom_x = deltaTmap_zoom.filter(
-                filter_dsc_x, on="orig", rtn=True
-            )
-            deltaTmap_zoom_y = deltaTmap_zoom.filter(
-                filter_dsc_y, on="orig", rtn=True
-            )
-            alphax_zoom_x = alphax_zoom.filter(
-                filter_dsc_x, on="orig", rtn=True
-            )
-            alphay_zoom_y = alphay_zoom.filter(
-                filter_dsc_y, on="orig", rtn=True
-            )
+            for idx, filtr in enumerate([filter_dsc_x, filter_dsc_y]):
+                dT_zoom[idx] = dT_zoom[idx].filter(
+                    filtr, on="orig", rtn=True
+                )
+                alpha_zoom[idx] = alpha_zoom[idx].filter(
+                    filtr, on="orig", rtn=True
+                )
             return self.get_single_transverse_velocity_from_sky(
-                deltaTmap_zoom_x,
-                deltaTmap_zoom_y,
-                alphax_zoom_x,
-                alphay_zoom_y,
+                dT_zoom[0], dT_zoom[1], alpha_zoom[0], alpha_zoom[1],
             )
        
+        keys_isw_rs = copy_or_sort_keys(list(skyarrays.keys()), "isw_rs")
+        keys_alpha = copy_or_sort_keys(list(skyarrays.keys()), "alpha")
+        
         _array_of_failures = np.ones(len(self.data.index)) * -99999
 
         if "theta1_mvel" in self.data.columns.values:
@@ -444,7 +451,10 @@ class Dipoles:
             _x_vel = copy.deepcopy(_array_of_failures)
             _y_vel = copy.deepcopy(_array_of_failures)
 
-        dip_index = self._get_index_of_dip_far_from_edge(extend, skyarrays["isw_rs"].npix)
+        dip_index = self._get_index_of_dip_far_from_edge(
+            extend,
+            skyarrays[keys[0]].npix,
+        )
         if len(dip_index) == 0:
             self.data["theta1_mvel"] = _array_of_failures
             self.data["theta2_mvel"] = _array_of_failures
@@ -452,14 +462,14 @@ class Dipoles:
         else:
             print(
                 f"Calculate the trans. vel. of {len(dip_index)} dipoles " +\
-                f"with {self._ncpus} cpus"
+                f"with {ncpus} cpus"
             )
-            if self._ncpus == 1:
+            if ncpus == 1:
                 _vt = []
                 for idx, dip in self.data.iloc[dip_index].iterrows():
                     _vt.append(integration(dip))
             else:
-                _vt = Parallel(n_jobs=self._ncpus)(
+                _vt = Parallel(n_jobs=ncpus)(
                     delayed(integration)(dip)
                     for idx, dip in self.data.iloc[dip_index].iterrows()
                 )
@@ -528,4 +538,5 @@ class Dipoles:
 
         x_vel = _transverse_velocity_component(deltaTx, alphax)
         y_vel = _transverse_velocity_component(deltaTy, alphay)
+        print("get_single_transverse_velocity_from_sky ->", x_vel, y_vel)
         return x_vel, y_vel

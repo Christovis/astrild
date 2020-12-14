@@ -94,11 +94,10 @@ class SkyUtils:
         #    suppression_R=suppression_R,
         #)
         for idx in halo_idx:
-            map_halo = SkyUtils.NFW_temperature_perturbation_map(
+            map_halo = SkyUtils.NFW_deflection_angle_map(
                 halo_cat["r200_deg"][idx],
                 halo_cat["m200"][idx],
                 halo_cat["c_NFW"][idx],
-                vel = (halo_cat["theta1_vel"][idx], halo_cat["theta2_vel"][idx]),
                 angu_diam_dist = halo_cat["rad_dist"][idx] * 0.6774,
                 npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
                 extent=extent,
