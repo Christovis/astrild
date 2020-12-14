@@ -1,5 +1,5 @@
 import os, time
-from typing import Tuple, Callable, Union, Optional, List
+from typing import Dict, Tuple, Callable, Union, Optional, List
 import ctypes as ct
 from pathlib import Path
 from functools import partial
@@ -78,38 +78,62 @@ class SkyNumbaUtils:
 class SkyUtils:
     def analytic_Halo_signal_to_SkyArray(
         halo_idx: np.array,
-        halo_cat: dict,
+        halo_cat: Dict[str, list],
         extent: int,
         direction: list,
         suppress: bool,
         suppression_R: float,
         npix: int,
+        signal: str,
     ) -> np.ndarray:
         map_array = np.zeros((npix, npix))
-        #dt_func = partial(
-        #    SkyUtils.NFW_temperature_perturbation_map,
-        #    extent=extent,
-        #    direction=direction,
-        #    suppress=suppress,
-        #    suppression_R=suppression_R,
-        #)
-        for idx in halo_idx:
-            map_halo = SkyUtils.NFW_deflection_angle_map(
-                halo_cat["r200_deg"][idx],
-                halo_cat["m200"][idx],
-                halo_cat["c_NFW"][idx],
-                angu_diam_dist = halo_cat["rad_dist"][idx] * 0.6774,
-                npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
+        # filter out indicis from halo catalogue
+        for key, val in halo_cat.items():
+            halo_cat[key] = np.asarray(val)[halo_idx]
+        
+        if signal == "dT":
+            partial_method= partial(
+                SkyUtils.NFW_temperature_perturbation_map,
                 extent=extent,
                 direction=direction,
                 suppress=suppress,
                 suppression_R=suppression_R,
             )
-            map_array = SkyUtils.add_patch_to_map(
-                map_array,
-                map_halo,
-                (halo_cat["theta1_pix"][idx], halo_cat["theta2_pix"][idx]),
+            for idx in range(len(halo_idx)):
+                map_halo = partial_method(
+                    halo_cat["r200_deg"][idx],
+                    halo_cat["m200"][idx],
+                    halo_cat["c_NFW"][idx],
+                    [halo_cat["theta1_vel"][idx], halo_cat["theta2_vel"][idx]],
+                    halo_cat["rad_dist"][idx] * 0.6774,
+                    npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
+                )
+                map_array = SkyUtils.add_patch_to_map(
+                    map_array,
+                    map_halo,
+                    (halo_cat["theta1_pix"][idx], halo_cat["theta2_pix"][idx]),
+                )
+        elif signal == "alpha":
+            partial_method= partial(
+                SkyUtils.NFW_deflection_angle_map,
+                extent=extent,
+                direction=direction,
+                suppress=suppress,
+                suppression_R=suppression_R,
             )
+            for idx in range(len(halo_idx)):
+                map_halo = partial_method(
+                    halo_cat["r200_deg"][idx],
+                    halo_cat["m200"][idx],
+                    halo_cat["c_NFW"][idx],
+                    halo_cat["rad_dist"][idx] * 0.6774,
+                    npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
+                )
+                map_array = SkyUtils.add_patch_to_map(
+                    map_array,
+                    map_halo,
+                    (halo_cat["theta1_pix"][idx], halo_cat["theta2_pix"][idx]),
+                )
         return map_array
     
 
@@ -153,7 +177,7 @@ class SkyUtils:
         M_200c: float,
         c_200c: float,
         vel: Union[list, tuple, np.ndarray],
-        angu_diam_dist: Optional[float] = None,
+        angu_diam_dist: float,
         npix: int = 100,
         extent: float = 1,
         direction: List[int] = [0, 1],
@@ -189,7 +213,7 @@ class SkyUtils:
         theta_200c: float,
         M_200c: float,
         c_200c: float,
-        angu_diam_dist: Optional[float] = None,
+        angu_diam_dist: float,
         npix: int = 100,
         extent: float = 1,
         direction: List[int] = [0],
@@ -252,7 +276,7 @@ class SkyUtils:
             suppress_radius = suppression_R * R_200c
             alpha_map *= np.exp(-(R / suppress_radius) ** 3)
         alpha_map = alpha_map.real
-        alpha_map[abs(alpha_map) > 100] = 0.  # avoid unphysical results
+        alpha_map[abs(alpha_map) > 100] = 0.  # remove unphysical results
         return alpha_map
 
     def convert_code_to_phy_units(

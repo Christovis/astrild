@@ -260,18 +260,20 @@ class SkyArray:
     
 
     @classmethod
-    def from_halo_dataframe_to_deflection_angle_map(
+    def from_halo_dataframe(
         cls,
         halo_cat: Union[pd.DataFrame, pd.Series],
+        npix: int = 8192,
         extent: float = 1,
         direction: List[int] = [0, 1],
         suppress: bool = False,
         suppression_R: float = 1,
-        npix: int = 8192,
         opening_angle: float = 20.,
         ncpus: int = 1,
+        to: str = "dT",
     ) -> "SkyArray":
         """
+        Identical to SkyArray.from_halo_series() but for a pd.DataFrame.
         """
         halo_dict = halo_cat[[
             "r200_deg",
@@ -282,11 +284,36 @@ class SkyArray:
             "theta1_pix",
             "theta2_pix",
         ]].to_dict(orient='list')
-        halo_idx = range(len(halo_dict["m200"]))
+        halo_idx = np.arange(len(halo_dict["m200"]))
+        
+        # set quantity label of SkyArray and method variable
+        if to == "dT":
+            quantity = "rs"
+            halo_dict["theta1_vel"] = halo_cat["theta1_vel"].values
+            halo_dict["theta2_vel"] = halo_cat["theta2_vel"].values
+        elif to == "alpha":
+            quantity = "alpha"
+        else:
+            SkyArrayWarning("The routine for this quantity is not implemented")
+        
+        # place directional indicator in SkyArray quantity label
+        if 1 in direction and 0 in direction:
+            pass
+        elif 0 in direction:
+            quantity += "_x"
+        else:
+            quantity += "_y"
         
         if ncpus == 1:
             map_array = SkyUtils.analytic_Halo_signal_to_SkyArray(
-                halo_idx, halo_dict, extent, direction, suppress, suppression_R, npix
+                halo_idx,
+                halo_dict,
+                extent,
+                direction,
+                suppress,
+                suppression_R,
+                npix,
+                to,
             )
         else:
             halo_idx_batches = np.array_split(halo_idx, ncpus)
@@ -299,17 +326,14 @@ class SkyArray:
                     suppress,
                     suppression_R,
                     npix,
+                    to,
                 ) for halo_idx_batch in halo_idx_batches
             )
             map_array = sum(map_sub_arrays)
-        map_array[np.isinf(map_array)] = 0.
+        map_array = np.nan_to_num(
+            map_array, copy=False, nan=0.0, posinf=0.0, neginf=0.0,
+        )
 
-        if 1 in direction and 0 in direction:
-            quantity = "alpha"
-        elif 0 in direction:
-            quantity = "alpha_x"
-        else:
-            quantity = "alpha_y"
         return cls(map_array, opening_angle, quantity, dirs=None, map_file=None)
     
 

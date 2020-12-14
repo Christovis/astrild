@@ -453,7 +453,7 @@ class Dipoles:
 
         dip_index = self._get_index_of_dip_far_from_edge(
             extend,
-            skyarrays[keys[0]].npix,
+            skyarrays[keys_isw_rs[0]].npix,
         )
         if len(dip_index) == 0:
             self.data["theta1_mvel"] = _array_of_failures
@@ -538,5 +538,4 @@ class Dipoles:
 
         x_vel = _transverse_velocity_component(deltaTx, alphax)
         y_vel = _transverse_velocity_component(deltaTy, alphay)
-        print("get_single_transverse_velocity_from_sky ->", x_vel, y_vel)
         return x_vel, y_vel
