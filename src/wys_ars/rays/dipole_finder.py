@@ -374,7 +374,7 @@ class Dipoles:
         filter_dsc_y: dict = default_filter_dipole_vel_ty,
     ) -> None:
         """
-        Calculate the transverse dipole/halo velocity through the temperature
+        Measure the transverse dipole/halo velocity (mtv) through the temperature
         perturbation map, by using the dipole signal of a moving potential.
 
         Args:
@@ -386,6 +386,8 @@ class Dipoles:
                 in x,y-direction.
             extend: The size of the map from which the trans-vel is calculated
                 in units of R200 of the associated halo.
+        
+        Returns:
         """
         assert any("isw_rs" in s for s in list(skyarrays.keys()))
         assert any("alpha" in s for s in list(skyarrays.keys()))
@@ -443,10 +445,10 @@ class Dipoles:
         
         _array_of_failures = np.ones(len(self.data.index)) * -99999
 
-        if "theta1_mvel" in self.data.columns.values:
-            _x_vel = self.data["theta1_mvel"].values
-            _y_vel = self.data["theta2_mvel"].values
-            self.data = self.data.drop(["theta1_mvel", "theta2_mvel"], axis=1)
+        if "theta1_mtv" in self.data.columns.values:
+            _x_vel = self.data["theta1_mtv"].values
+            _y_vel = self.data["theta2_mtv"].values
+            self.data = self.data.drop(["theta1_mtv", "theta2_mtv"], axis=1)
         else:
             _x_vel = copy.deepcopy(_array_of_failures)
             _y_vel = copy.deepcopy(_array_of_failures)
@@ -455,8 +457,8 @@ class Dipoles:
             extend, skyarrays[keys_isw_rs[0]].npix,
         )
         if len(dip_index) == 0:
-            self.data["theta1_mvel"] = _array_of_failures
-            self.data["theta2_mvel"] = _array_of_failures
+            self.data["theta1_mtv"] = _array_of_failures
+            self.data["theta2_mtv"] = _array_of_failures
         
         else:
             print(
@@ -476,8 +478,8 @@ class Dipoles:
             _vt = np.asarray(_vt).T
             _x_vel[dip_index] = _vt[0]
             _y_vel[dip_index] = _vt[1]
-            self.data["theta1_mvel"] = _x_vel
-            self.data["theta2_mvel"] = _y_vel
+            self.data["theta1_mtv"] = _x_vel
+            self.data["theta2_mtv"] = _y_vel
 
 
     def _get_index_of_dip_far_from_edge(
