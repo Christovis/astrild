@@ -329,26 +329,39 @@ def analytical_dipole_maps(
     )
     
     for idx, ax in enumerate(axis.reshape(-1)):
-        dip = dipoles[dipoles["index"] == dipole_index[idx]]
+        dip = dipoles[dipoles["index"] == dipole_index[idx]].squeeze()
         # Load Map
-        dt_map = SkyArray.from_dict_to_temperature_perturbation_map(
-            dip.r200_deg.values[0],
-            dip.m200.values[0],
-            dip.c_NFW.values[0],
-            [dip.theta1_vel.values[0], dip.theta2_vel.values[0]],
-            dip.rad_dist.values[0],
+        skyrs = SkyArray.from_halo_series(
+            dip,
+            npix=int(2 * dip.r200_pix * 10) + 1,
             extent=20,
             direction=[0, 1],
             suppress=True,
             suppression_R=10,
+            to="dT",
+        )
+        skyalpha = SkyArray.from_halo_series(
+            dip,
+            npix=int(2 * dip.r200_pix * 10) + 1,
+            extent=20,
+            direction=[0, 1],
+            suppress=True,
+            suppression_R=10,
+            to="alpha",
+        )
+        skymaps = Dipoles.apply_filter_on_single_dipole_image(
+            dip, {"rs": skyrs, "alpha": skyalpha},
+        )
+        theta1_mvel, theta2_mvel = Dipoles.get_single_transverse_velocity_from_sky(
+            skymaps["rs_x"], skymaps["rs_y"], skymaps["alpha_x"], skymaps["alpha_y"],
         )
         ax.imshow(
-            dt_map.data["orig"] * 1e6,
+            skyrs.data["orig"] * 1e6,
             extent=[
-                dip.theta1_deg.values[0] - dip.r200_deg.values[0]*extent,
-                dip.theta1_deg.values[0] + dip.r200_deg.values[0]*extent,
-                dip.theta2_deg.values[0] - dip.r200_deg.values[0]*extent,
-                dip.theta2_deg.values[0] + dip.r200_deg.values[0]*extent,
+                dip.theta1_deg - dip.r200_deg*extent,
+                dip.theta1_deg + dip.r200_deg*extent,
+                dip.theta2_deg - dip.r200_deg*extent,
+                dip.theta2_deg + dip.r200_deg*extent,
             ],
             cmap=cm.RdBu_r,
             origin="lower",
@@ -356,8 +369,8 @@ def analytical_dipole_maps(
         )
         ax.add_artist(
             plt.Circle(
-                (dip.theta1_deg.values[0], dip.theta2_deg.values[0]),
-                dip.r200_deg.values[0],
+                (dip.theta1_deg, dip.theta2_deg),
+                dip.r200_deg,
                 fill=False,
                 #alpha=0.5,
                 color="lime",
@@ -367,16 +380,25 @@ def analytical_dipole_maps(
             )
         )
         ax.quiver(
-            dip.theta1_deg.values[0], dip.theta2_deg.values[0],
-            dip.theta1_vel.values[0], dip.theta2_vel.values[0],
+            dip.theta1_deg, dip.theta2_deg,
+            theta1_mvel, theta2_mvel,
+            facecolor="grey",
+            edgecolor="w",
+            scale=arrow_scale,
+            zorder=2,
+        )
+        ax.quiver(
+            dip.theta1_deg, dip.theta2_deg,
+            dip.theta1_vel, dip.theta2_vel,
+            linestyle='dashed',
             facecolor="k",
             edgecolor="w",
             scale=arrow_scale,
             zorder=2,
         )
         ax.text(
-            dip.theta1_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
-            dip.theta2_deg.values[0] - dip.r200_deg.values[0]*extent*0.9,
+            dip.theta1_deg - dip.r200_deg*extent*0.9,
+            dip.theta2_deg - dip.r200_deg*extent*0.9,
             "dip.idx = %.2f" % dipole_index[idx],
             color='black', 
             bbox=dict(

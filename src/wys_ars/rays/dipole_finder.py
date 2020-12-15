@@ -387,8 +387,8 @@ class Dipoles:
             extend: The size of the map from which the trans-vel is calculated
                 in units of R200 of the associated halo.
         """
-        assert "isw_rs" in list(skyarrays.keys())
-        assert "alpha" in list(skyarrays.keys())
+        assert any("isw_rs" in s for s in list(skyarrays.keys()))
+        assert any("alpha" in s for s in list(skyarrays.keys()))
         
         def copy_or_sort_keys(keys: str, get: str) -> list:
             _kk = [k for k in keys if get in k]
@@ -452,8 +452,7 @@ class Dipoles:
             _y_vel = copy.deepcopy(_array_of_failures)
 
         dip_index = self._get_index_of_dip_far_from_edge(
-            extend,
-            skyarrays[keys_isw_rs[0]].npix,
+            extend, skyarrays[keys_isw_rs[0]].npix,
         )
         if len(dip_index) == 0:
             self.data["theta1_mvel"] = _array_of_failures
@@ -511,6 +510,41 @@ class Dipoles:
             dir_in=None,
         )
         return img_zoom
+
+    
+    @staticmethod
+    def apply_filter_on_single_dipole_image(
+        dipole: pd.Series,
+        skyarrays: Dict[str, Type[SkyArray]],
+        filter_dsc_x: dict = default_filter_dipole_vel_tx,
+        filter_dsc_y: dict = default_filter_dipole_vel_ty,
+    ) -> tuple:
+        """
+        Filter set-up as in arxiv:1812.04241
+
+        Args:
+            dipole: Dipole properties
+            skyarrays: Dictionary must contains SkyArray instances of
+                unfiltered isw-rs map [-] and deflection angle map [rad].
+                The maps can contain either the individual x,y-components
+                of the vector fields or their sum.
+            filter_dsc_x,y: Dictionary of filters applied to cropped map
+                in x,y-direction.
+        Returns:
+        """
+        filter_dsc_x["gaussian_first_derivative"]["theta_i"] = (
+            2 * dipole.r200_deg * un.deg
+        )
+        filter_dsc_y["gaussian_first_derivative"]["theta_i"] = (
+            2 * dipole.r200_deg * un.deg
+        )
+        keys = list(skyarrays.keys())
+        for key in keys: 
+            for label, filtr in zip(["_x", "_y"], [filter_dsc_x, filter_dsc_y]):
+                skyarrays[key + label] = skyarrays[key].filter(
+                    filtr, on="orig", rtn=True
+                )
+        return skyarrays
 
 
     @staticmethod
