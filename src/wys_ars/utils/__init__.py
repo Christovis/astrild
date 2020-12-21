@@ -9,4 +9,7 @@ from .geometrical_transforms import (
     get_sph2cart_jacobian,
     convert_vec_sph2cart,
     convert_vec_cart2sph,
+    transform_box_to_lc_cart_coords,
+    radial_coordinate_in_lc,
+    angular_coordinate_in_lc,
 )

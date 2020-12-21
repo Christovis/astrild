@@ -15,7 +15,7 @@ def Dc_to_Da(Dc: float, redshift: float) -> float:
     """
     return Dc/(1 + redshift)
 
-def Dc_to_redshift(Dc: float, cosmo, units=u.Mpc) -> float:
+def Dc_to_redshift(Dc: float, cosmo, units=un.Mpc) -> float:
     """ Calculate the redshift from comoving distance (D_c) """
     return z_at_value(cosmo.comoving_distance, Dc * units)
 
@@ -65,7 +65,7 @@ def get_cart2sph_jacobian(th: float, ph: float) -> np.ndarray:
     row1 = np.stack((np.sin(th) * np.cos(ph), np.cos(th) * np.cos(ph), -np.sin(ph)))
     row2 = np.stack((np.sin(th) * np.sin(ph), np.cos(th) * np.sin(ph), np.cos(ph)))
     row3 = np.stack((np.cos(th), -np.sin(th), 0.0 * np.cos(th)))
-    return np.stack((row1, row2, row3))
+    return np.squeeze(np.stack((row1, row2, row3)))
 
 def get_sph2cart_jacobian(th: float, ph: float) -> np.ndarray:
     """
@@ -79,9 +79,9 @@ def get_sph2cart_jacobian(th: float, ph: float) -> np.ndarray:
     row1 = np.stack((np.sin(th) * np.cos(ph), np.sin(th) * np.sin(ph), np.cos(th)))
     row2 = np.stack((np.cos(th) * np.cos(ph), np.cos(th) * np.sin(ph), -np.sin(th)))
     row3 = np.stack((-np.sin(ph), np.cos(ph), 0.0 * np.cos(th)))
-    return np.stack((row1, row2, row3))
+    return np.squeeze(np.stack((row1, row2, row3)))
 
-def convert_vec_sph2cart(th: float, ph: float, vij_sph: np.array) -> tuple:
+def convert_vec_sph2cart(th: np.ndarray, ph: np.ndarray, vij_sph: np.array) -> tuple:
     """
     Calculate the cartesian velocity components from the spherical ones.
     Args:
@@ -89,10 +89,12 @@ def convert_vec_sph2cart(th: float, ph: float, vij_sph: np.array) -> tuple:
         ph: phi angle in spherical coordinates.
         vij_sph: vector in spherical coorindates, [v_r, v_th, v_ph]
     Returns:
+        transformed velocity field and defined as:
+            v_x , v_y, v_z
     """
     # find the spherical to cartesian coords transformation matrix
     J = get_sph2cart_jacobian(th, ph)
-    vij_cart = np.einsum('ij...,i...->j...', J, vij_sph)
+    vij_cart = np.einsum('ij...,i...->j...', J, vij_sph.T).T
     return vij_cart
 
 def convert_vec_cart2sph(th: float, ph: float, vij_cart: np.array) -> tuple:
@@ -103,11 +105,33 @@ def convert_vec_cart2sph(th: float, ph: float, vij_cart: np.array) -> tuple:
         ph: phi angle in spherical coordinates.
         vij_cart: vector in spherical coorindates, [v_x, v_y, v_z]
     Returns:
+        transformed velocity field and defined as:
+            v_r (radial), v_th (co-latitude), v_ph (longitude)
     """
     # find the cartesian to spherical coords transformation matrix
-    J_cart2sph = get_cart2sph_jacobian(th, ph)
-    # transform the velocity field and defined as:
-    #   v_r (radial), v_th (co-latitude), v_ph (longitude)
-    vij_sph = np.einsum('ij...,i...->j...', J_cart2sph, vij_cart)
+    J = get_cart2sph_jacobian(th, ph)
+    vij_sph = np.einsum('ij...,i...->j...', J, vij_cart.T).T
     return vij_sph
 
+def transform_box_to_lc_cart_coords(
+    pos: np.ndarray, boxsize: float, boxdist: float,
+) -> np.ndarray:
+    """ Translate objects position in box to light-cone """
+    # cartesian coord. in light-cone [Mpc/h]
+    pos[:, 0] = pos[:, 0] - boxsize / 2
+    pos[:, 1] = pos[:, 1] - boxsize / 2
+    pos[:, 2] = pos[:, 2] + boxdist
+    return pos
+
+def radial_coordinate_in_lc(pos: np.ndarray) -> np.array:
+    """ Radial distance from observer, units of pos[:,:] """
+    return np.sqrt(pos[:, 0]**2 + pos[:, 1]**2 + pos[:, 2]**2)
+
+def angular_coordinate_in_lc(pos: np.ndarray, unit="deg") -> tuple:
+    """ Angular coordinates with respect to z-axis, [rad/deg] """
+    theta1_deg = np.arctan(pos[:, 0] / pos[:, 2])
+    theta2_deg = np.arctan(pos[:, 1] / pos[:, 2])
+    if unit == "deg":
+        theta1_deg *= 180/np.pi
+        theta2_deg *= 180/np.pi
+    return theta1_deg, theta2_deg
