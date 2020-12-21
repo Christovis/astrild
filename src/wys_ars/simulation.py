@@ -33,6 +33,7 @@ class Simulation:
         if dir_out is None:
             dir_out = dir_sim
         self.dirs = {"sim": dir_sim, "out": dir_out}
+        self.name = self._get_simname_from_dirsim(dir_sim)
         self.file_dsc = file_dsc
         self.dir_root = dir_root
         if dir_root is not None:
@@ -46,6 +47,14 @@ class Simulation:
                 )
             }
         self.dimensions = 3
+
+
+    def _get_simname_from_dirsim(self, dir_sim: str) -> str:
+        """
+        Set the directory name inside which the simulation is as the
+        simulation name.
+        """
+        return [elem for elem in dir_sim.split('/') if len(elem) > 0][-1]
 
     def _get_all_files(self, file_dsc: Dict[str, str], directory: str,) -> List[str]:
         """ """

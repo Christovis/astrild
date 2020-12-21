@@ -250,18 +250,30 @@ class SimulationCollection:
         """
         Adds different ray-tracing outputs together. This can give you the
         integrated ray-tracing quantities between arbitrary redshifts along
-        the ligh-cone.
+        the ligh-cone. The ray-tracing outputs must either have the format of
+        RayRamses outputs in pd.DataFrames or np.ndarray images.
 
         Args:
+            dir_out:
+            columns:
+            columns_z_shift:
+            integration_range:
+            ray_file_root:
+            sim_folder_root:
+            z_src:
+            z_src_shift:
         """
         # sim_folder_root = self.dirs["lc"] + sim_folder_root
-        box_ray_nrs = self._get_box_and_ray_nrs(integration_range, rm_ray)
+        box_ray_nrs = self._get_box_and_ray_nrs_for_integration_range(
+            integration_range, rm_ray,
+        )
         # loop over simulations in collection
         first = True
         for sim_idx, sim_name in enumerate(self.sim.keys()):
             print(sim_name)
             _sim = self.sim[sim_name]
-            box_nr = int(re.findall(r"\d+", sim_name)[0])
+            box_nr = self._boxnr_from_simname(sim_name)
+            
             if box_nr not in list(box_ray_nrs.keys()):
                 continue
 
@@ -273,12 +285,17 @@ class SimulationCollection:
                     + f"{_sim.file_dsc['root']}_*{ray_nr}."
                     + f"{_sim.file_dsc['extension']}"
                 )[0]
-                ray_map_df = pd.read_hdf(ray_file, key="df", mode="r")
+
+                if ray_file.split(".")[-1] == "h5":
+                    ray_map_df = pd.read_hdf(ray_file, key="df", mode="r")
+                elif ray_file.split(".")[-1] == "npy":
+                    ray_map = np.load(ray_file)
+                else:
+                    SimulationCollectionWarning("This file type is not supported.")
 
                 print(
                     "Box Nr. %d; %s; Redshift %.3f"
-                    % (box_nr, os.path.basename(ray_file), sim_info_df["redshift"]),
-                    len(ray_map_df.index.values),
+                    % (box_nr, os.path.basename(ray_file), sim_info_df["redshift"])
                 )
 
                 if z_src_shift is not None and sim_info_df["redshift"] <= z_src_shift:
@@ -293,36 +310,50 @@ class SimulationCollection:
 
                     # Shift redshift of light source
                     # only of kappa but not of iswrs !!!
-                    ray_map_df["kappa_2"] = self._translate_redshift(
-                        ray_map_df["kappa_2"],
-                        sim_info_df["redshift"],
-                        z_next,
-                        z_src,
-                        z_src_shift,
-                    )
+                    if ray_file.split(".")[-1] == "h5":
+                        ray_map_df["kappa_2"] = self._translate_redshift(
+                            ray_map_df["kappa_2"].values,
+                            sim_info_df["redshift"],
+                            z_next,
+                            z_src,
+                            z_src_shift,
+                        )
 
                 if first is True:
-                    ray_df_sum = ray_map_df
+                    if ray_file.split(".")[-1] == "h5":
+                        ray_df_sum = ray_map_df
+                    else:
+                        ray_sum = ray_map
                     first = False
 
                 else:
-                    for column in columns:
-                        ray_df_sum[column] = (
-                            ray_df_sum[column].values + ray_map_df[column].values
-                        )
-        self._merged_snapshots_to_file(ray_df_sum, dir_out, integration_range)
+                    if ray_file.split(".")[-1] == "h5":
+                        for column in columns:
+                            ray_df_sum[column] = (
+                                ray_df_sum[column].values + ray_map_df[column].values
+                            )
+                    else:
+                        ray_sum += ray_map
 
-    def _get_box_and_ray_nrs(
+    def _get_box_and_ray_nrs_for_integration_range(
         self,
         integration_range: dict,
         rm_ray: Optional[dict] = None,
     ) -> dict:
         """
-        Get all box and ray-snapshot numbers for selected range.
+        Get all box and ray-snapshot numbers for selected integration range.
 
         Args:
-            integration_range:
-            rm_ray:
+            integration_range: A dictionary of which the key must be one of
+                ['box', 'ray', 'z'] to define how the range is defined. The
+                corresponding value is a list containing the integration
+                boundaries.
+            rm_ray: If any snapshot within the defined range should be
+                excluded, it can be identified by a similar dictionary
+                to 'integration_range' expcept that now the value
+                identifies the snapshot to be removed.
+        
+        Returns:
         """
         if not integration_range["z"]:
             if integration_range["box"][0] == 0:
@@ -353,7 +384,7 @@ class SimulationCollection:
 
     def _translate_redshift(
         self,
-        quantity: str,
+        quantity: np.ndarray,
         z_near: float,
         z_far: float,
         z_src: float,
@@ -428,3 +459,14 @@ class SimulationCollection:
             Path(dir_out).mkdir(parents=True, exist_ok=True)
         print(f"Save in -> {fout}")
         ray_df_sum.to_hdf(fout, key="df", mode="w")
+
+
+    def _boxnr_from_simname(simname: Union[str, int]) -> int:
+        """ Get box number from simulation name """
+        if isinstance(simname, str):
+            box_nr = int(re.findall(r"\d+", simname)[0])
+        elif isinstance(simname, int):
+            box_nr = simname
+        return box_nr
+
+

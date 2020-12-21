@@ -1,0 +1,47 @@
+sim1:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box1/'
+    dir_out: null
+    file_dsc:
+      root: 'halos'
+      extension: 'ascii'
+    dir_root: 'rockstar'
+    boxsize: 1000.
+    domain_level: 1024
+
+sim2:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box2/'
+    dir_out: null
+    file_dsc:
+      root: 'halos'
+      extension: 'ascii'
+    dir_root: 'rockstar'
+    boxsize: 1000.
+    domain_level: 1024
+
+sim3:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box3/'
+    dir_out: null
+    file_dsc:
+      root: 'halos'
+      extension: 'ascii'
+    dir_root: 'rockstar'
+    boxsize: 1600.
+    domain_level: 1024
+
+sim4:
+  type: 'particles'
+  init:
+    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box4/'
+    dir_out: null
+    file_dsc:
+      root: 'halos'
+      extension: 'ascii'
+    dir_root: 'rockstar'
+    boxsize: 2000.
+    domain_level: 1024

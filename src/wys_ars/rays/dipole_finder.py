@@ -445,10 +445,10 @@ class Dipoles:
         
         _array_of_failures = np.ones(len(self.data.index)) * -99999
 
-        if "theta1_mtv" in self.data.columns.values:
-            _x_vel = self.data["theta1_mtv"].values
-            _y_vel = self.data["theta2_mtv"].values
-            self.data = self.data.drop(["theta1_mtv", "theta2_mtv"], axis=1)
+        if "theta1_mtvel" in self.data.columns.values:
+            _x_vel = self.data["theta1_mtvel"].values
+            _y_vel = self.data["theta2_mtvel"].values
+            self.data = self.data.drop(["theta1_mtvel", "theta2_mtvel"], axis=1)
         else:
             _x_vel = copy.deepcopy(_array_of_failures)
             _y_vel = copy.deepcopy(_array_of_failures)
@@ -457,8 +457,8 @@ class Dipoles:
             extend, skyarrays[keys_isw_rs[0]].npix,
         )
         if len(dip_index) == 0:
-            self.data["theta1_mtv"] = _array_of_failures
-            self.data["theta2_mtv"] = _array_of_failures
+            self.data["theta1_mtvel"] = _array_of_failures
+            self.data["theta2_mtvel"] = _array_of_failures
         
         else:
             print(
@@ -478,8 +478,8 @@ class Dipoles:
             _vt = np.asarray(_vt).T
             _x_vel[dip_index] = _vt[0]
             _y_vel[dip_index] = _vt[1]
-            self.data["theta1_mtv"] = _x_vel
-            self.data["theta2_mtv"] = _y_vel
+            self.data["theta1_mtvel"] = _x_vel
+            self.data["theta2_mtvel"] = _y_vel
 
 
     def _get_index_of_dip_far_from_edge(

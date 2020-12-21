@@ -587,7 +587,6 @@ class SkyArray:
     ) -> Union[np.ndarray, None]:
         """
         Merge tiles created with self.division.
-        Should use sklearn.feature_extraction.image.reconstruct_from_patches_2d
 
         Args:
             tiles: 3D

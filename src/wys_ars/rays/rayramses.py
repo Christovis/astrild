@@ -15,6 +15,11 @@ from astropy.cosmology import LambdaCDM#, cvG
 from wys_ars.simulation import Simulation
 from wys_ars.particles.ecosmog import Ecosmog
 from wys_ars.particles.halo import Halos
+from wys_ars.utils.geometrical_transforms import (
+    transform_box_to_lc_cart_coords,
+    radial_coordinate_in_lc,
+    angular_coordinate_in_lc,
+)
 from wys_ars.io import IO
 
 dir_src = Path(__file__).parent.absolute()
@@ -155,9 +160,18 @@ class RayRamses(Simulation):
         """
         Adds different ray-tracing outputs together. This can give you the
         integrated ray-tracing quantities between arbitrary redshifts along
-        the ligh-cone.
+        the ligh-cone. The ray-tracing outputs must either have the format of
+        RayRamses outputs in pd.DataFrames or np.ndarray images.
 
         Args:
+            dir_out:
+            columns:
+            columns_z_shift:
+            integration_range:
+            ray_file_root:
+            sim_folder_root:
+            z_src:
+            z_src_shift:
         """
         file_name = self.dirs["lc"] + "ray_snapshot_info.h5"
         if not os.path.isfile(file_name):
@@ -509,14 +523,9 @@ class RayRamses(Simulation):
 
         # cartesian coord. in light-cone [Mpc/h]
         pos = halocat["GroupPos"][:, :] * coeff
-        pos[:, 0] = pos[:, 0] - boxsize / 2
-        pos[:, 1] = pos[:, 1] - boxsize / 2
-        pos[:, 2] = pos[:, 2] + boxdist
-        # radial distance from observer [Mpc/h]
-        rad_dist = np.sqrt(pos[:, 0]**2 + pos[:, 1]**2 + pos[:, 2]**2)
-        # angular coord [deg]
-        theta1_deg = np.arctan(pos[:, 0] / pos[:, 2]) * 180/np.pi
-        theta2_deg = np.arctan(pos[:, 1] / pos[:, 2]) * 180/np.pi
+        pos = transform_box_to_lc_cart_coords(pos, boxsize, boxdist)
+        rad_dist = radial_coordinate(pos)
+        theta1_deg, theta2_deg = angular_coordinate(pos)
 
         # index of halos in light-cone
         indx = np.where(
@@ -604,14 +613,9 @@ class RayRamses(Simulation):
 
         # cartesian coord. in light-cone [Mpc/h]
         pos = halocat[["x", "y", "z"]].values
-        pos[:, 0] = pos[:, 0] - boxsize / 2
-        pos[:, 1] = pos[:, 1] - boxsize / 2
-        pos[:, 2] = pos[:, 2] + boxdist
-        # radial distance from observer [Mpc/h]
-        rad_dist = np.sqrt(pos[:, 0]**2 + pos[:, 1]**2 + pos[:, 2]**2)
-        # angular coord [deg]
-        theta1_deg = np.arctan(pos[:, 0] / pos[:, 2]) * 180/np.pi
-        theta2_deg = np.arctan(pos[:, 1] / pos[:, 2]) * 180/np.pi
+        pos = transform_box_to_lc_cart_coords(pos, boxsize, boxdist)
+        rad_dist = radial_coordinate(pos)
+        theta1_deg, theta2_deg = angular_coordinate(pos)
 
         # index of halos in light-cone
         indx = np.where(
@@ -679,7 +683,7 @@ class RayRamses(Simulation):
         }
         halos_df = pd.DataFrame(data=halos_dict)
         return halos_df
-
+        
 
 def _degree_to_pixel(deg: np.ndarray, opening_angle, npix) -> np.ndarray:
     """ Convert degree to pixel position """
