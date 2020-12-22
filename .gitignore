@@ -1,6 +1,3 @@
-src/wys_ars/particles/utils_cython/dist/
-src/wys_ars/particles/utils_cython/build/
-src/wys_ars/particles/utils_cython/pairwise_velocity_routines.egg-info/
 src/wys_ars/utils/arepo_hdf5_library_2020/
 /.coverage
 /.mypy_cache/
@@ -12,10 +9,18 @@ src/wys_ars/utils/arepo_hdf5_library_2020/
 /src/*.egg-info/
 __pycache__/
 tests/.coverage
-tests/coverage.xml
 tests/pytest.ini
 __init__.pyc
+
+# cython
+src/wys_ars/particles/utils_cython/dist/
+src/wys_ars/particles/utils_cython/build/
+src/wys_ars/particles/utils_cython/pairwise_velocity_routines.egg-info/
 *.so
 *.c
 *.html
 *.html
+
+# pytest
+.coverage
+*.xml
