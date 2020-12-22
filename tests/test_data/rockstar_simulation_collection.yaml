@@ -1,7 +1,7 @@
 sim1:
   type: 'particles'
   init:
-    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box1/'
+    dir_sim: '/tmp/box1/'
     dir_out: null
     file_dsc:
       root: 'halos'
@@ -13,7 +13,7 @@ sim1:
 sim2:
   type: 'particles'
   init:
-    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box2/'
+    dir_sim: '/tmp/box2/'
     dir_out: null
     file_dsc:
       root: 'halos'
@@ -25,7 +25,7 @@ sim2:
 sim3:
   type: 'particles'
   init:
-    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box3/'
+    dir_sim: '/tmp/box3/'
     dir_out: null
     file_dsc:
       root: 'halos'
@@ -37,7 +37,7 @@ sim3:
 sim4:
   type: 'particles'
   init:
-    dir_sim: '/cosma7/data/dp004/dc-beck3/ISW_Ree_Sciama/01Simulations/box4/'
+    dir_sim: '/tmp/box4/'
     dir_out: null
     file_dsc:
       root: 'halos'
