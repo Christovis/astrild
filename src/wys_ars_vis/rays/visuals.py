@@ -166,6 +166,7 @@ def simulated_dipole_maps(
     extent: float,
     theta: float = 20.,
     arrow_scale: Optional[float] = None,
+    mlabel: str = "_mtvel_ana",
 ) -> mpl.figure.Figure:
     """
     Plot sky-data contained in filepaths_map overlayed by halo-data
@@ -195,7 +196,7 @@ def simulated_dipole_maps(
         )
 
     for idx, ax in enumerate(axis.reshape(-1)):
-        dip = dipoles[dipoles["index"] == dipole_index[idx]]
+        dip = dipoles[dipoles["id"] == dipole_index[idx]]
         zoom = Dipoles.get_dipole_image(
             skyarray,
             (dip.theta1_pix.values[0], dip.theta2_pix.values[0]),
@@ -228,17 +229,19 @@ def simulated_dipole_maps(
         )
         ax.quiver(
             dip.theta1_deg.values[0], dip.theta2_deg.values[0],
-            dip.theta1_vel.values[0], dip.theta2_vel.values[0],
-            facecolor="k",
+            dip["theta1" + mlabel].values[0], dip["theta2" + mlabel].values[0],
+            facecolor="grey",
             edgecolor="w",
             scale=arrow_scale,
             zorder=2,
         )
         ax.quiver(
-            dip.theta1_deg.values[0], dip.theta2_deg.values[0],
-            dip.theta1_mvel.values[0], dip.theta2_mvel.values[0],
-            facecolor="grey",
-            edgecolor="w",
+            dip.theta1_deg, dip.theta2_deg,
+            dip.theta1_tv, dip.theta2_tv,
+            linestyle='dotted',
+            linewidth=1,
+            facecolor='none',
+            edgecolor="k",
             scale=arrow_scale,
             zorder=2,
         )
@@ -286,7 +289,7 @@ def dipole_cross_section(
     )
 
     for idx, ax in enumerate(axis.reshape(-1)):
-        dip = dipoles[dipoles["index"] == dipole_index[idx]]
+        dip = dipoles[dipoles["id"] == dipole_index[idx]]
         zoom = Dipoles.get_dipole_image(
             skyarray,
             (dip.theta1_pix.values[0], dip.theta2_pix.values[0]),
@@ -314,7 +317,6 @@ def dipole_cross_section(
 def analytical_dipole_maps(
     dipole_index: List[int],
     dipoles: pd.DataFrame,
-    skymap: Union[str, np.ndarray],
     extent: float,
     theta: float = 20.,
     arrow_scale: Optional[float] = None,
@@ -329,7 +331,7 @@ def analytical_dipole_maps(
     )
     
     for idx, ax in enumerate(axis.reshape(-1)):
-        dip = dipoles[dipoles["index"] == dipole_index[idx]].squeeze()
+        dip = dipoles[dipoles["id"] == dipole_index[idx]].squeeze()
         # Load Map
         skyrs = SkyArray.from_halo_series(
             dip,
@@ -355,6 +357,7 @@ def analytical_dipole_maps(
         theta1_mvel, theta2_mvel = Dipoles.get_single_transverse_velocity_from_sky(
             skymaps["rs_x"], skymaps["rs_y"], skymaps["alpha_x"], skymaps["alpha_y"],
         )
+        print(theta1_mvel, theta2_mvel)
         ax.imshow(
             skyrs.data["orig"] * 1e6,
             extent=[
@@ -389,10 +392,11 @@ def analytical_dipole_maps(
         )
         ax.quiver(
             dip.theta1_deg, dip.theta2_deg,
-            dip.theta1_vel, dip.theta2_vel,
-            linestyle='dashed',
-            facecolor="k",
-            edgecolor="w",
+            dip.theta1_tv, dip.theta2_tv,
+            linestyle='dotted',
+            linewidth=1,
+            facecolor='none',
+            edgecolor="k",
             scale=arrow_scale,
             zorder=2,
         )
