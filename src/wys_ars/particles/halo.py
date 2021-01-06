@@ -7,6 +7,7 @@ from importlib import import_module
 import yaml
 import numpy as np
 import pandas as pd
+from sklearn.neighbors import BallTree
 
 #from halotools.mock_observables import tpcf_multipole
 
@@ -39,12 +40,19 @@ class Halos:
         simulation:
 
     Methods:
-        get_subfind_halo_data:
+        from_subfind:
+        from_rockstar:
+        from_dataframe:
+        from_file:
         get_subfind_stats:
         get_subfind_tpcf:
-        get_rockstar_halo_data:
         get_rockstar_stats:
         get_rockstar_tpcf:
+        filter_resolved_subfind_halos:
+        filter_resolved_rockstar_halos:
+        _save_results:
+        _sort_statistics:
+        _create_filename:
     """
 
     def __init__(
@@ -319,7 +327,6 @@ class Halos:
     #            print(l, "!!!!!!!!!!!! snap_%d" % snap_nr, _tpcf)
     #    
     #    tpcf["s_bins"] = s_bins
-
     #    if save:
     #        IO.save_tpcf(
     #            self.sim.dirs['out'],
@@ -548,3 +555,25 @@ class Halos:
             file_out[idx] = string
             file_out = "_".join(file_out)
         return self.sim.dirs["out"] + file_out
+
+
+    @staticmethod
+    def get_nearest_neighbours(
+        df: pd.DataFrame, target_id: int, dmax: int,
+    ) -> tuple:
+        """
+        Args:
+            df: halo DataFrame
+            target_id: object id for which to find NNs
+            dmax: maximal distance between objects
+
+        Return:
+            indices and distances
+        """
+        pos = df[["theta1_deg", "theta2_deg"]].values
+        pos_i = df[df["id"] == target_id][["theta1_deg", "theta2_deg"]].values
+        if len(pos_i.shape) == 1:
+            pos_i = pos_i[np.newaxis, :]
+        btree = BallTree(pos)
+        pairs = btree.query_radius(pos_i, dmax, return_distance=True,)
+        return pairs[0][0], pairs[1][0]
