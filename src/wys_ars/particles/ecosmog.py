@@ -9,8 +9,7 @@ import pandas as pd
 import astropy
 from astropy import units as u
 from astropy import constants as const
-
-# from astropy.cosmology import LambdaCDM, cvG
+from astropy.cosmology import LambdaCDM
 
 from nbodykit.lab import *
 
@@ -63,12 +62,14 @@ class Ecosmog(Simulation):
         dir_root: str = "snapdir",
         boxsize: float = 500.0,
         domain_level: int = 512,
+        cosmo: astropy.cosmology = LambdaCDM(H0=67.74, Om0=0.3089, Ode0=0.6911),
     ):
         super().__init__(dir_sim, dir_out, file_dsc, dir_root)
         self.boxsize = boxsize
         self.domain_level = domain_level
         self.npar = domain_level
         self.config = config
+        self.cosmo = cosmo
 
 
     def to_gadget(self) -> None:
