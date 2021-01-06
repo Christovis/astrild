@@ -10,7 +10,7 @@ import pandas as pd
 import astropy
 from astropy import units as un
 from astropy import constants as const
-from astropy.cosmology import LambdaCDM#, cvG
+from astropy.cosmology import z_at_value, LambdaCDM
 
 from wys_ars.simulation import Simulation
 from wys_ars.particles.ecosmog import Ecosmog
@@ -524,8 +524,8 @@ class RayRamses(Simulation):
         # cartesian coord. in light-cone [Mpc/h]
         pos = halocat["GroupPos"][:, :] * coeff
         pos = transform_box_to_lc_cart_coords(pos, boxsize, boxdist)
-        rad_dist = radial_coordinate(pos)
-        theta1_deg, theta2_deg = angular_coordinate(pos)
+        rad_dist = radial_coordinate_in_lc(pos)
+        theta1_deg, theta2_deg = angular_coordinate_in_lc(pos, unit="deg")
 
         # index of halos in light-cone
         indx = np.where(
@@ -614,8 +614,8 @@ class RayRamses(Simulation):
         # cartesian coord. in light-cone [Mpc/h]
         pos = halocat[["x", "y", "z"]].values
         pos = transform_box_to_lc_cart_coords(pos, boxsize, boxdist)
-        rad_dist = radial_coordinate(pos)
-        theta1_deg, theta2_deg = angular_coordinate(pos)
+        rad_dist = radial_coordinate_in_lc(pos)
+        theta1_deg, theta2_deg = angular_coordinate_in_lc(pos, unit="deg")
 
         # index of halos in light-cone
         indx = np.where(
@@ -625,6 +625,8 @@ class RayRamses(Simulation):
             & (np.abs(theta2_deg) <= opening_angle / 2)
         )[0]
         halocat = halocat.iloc[halocatindex[indx]]
+        if len(indx) == 0: return None
+
         pos = pos[halocatindex[indx], :]
         rad_dist = rad_dist[halocatindex[indx]]
         theta1_deg = theta1_deg[halocatindex[indx]]
@@ -632,7 +634,7 @@ class RayRamses(Simulation):
         print(f"There are {len(halocat.index.values)} halos in light-cone in box {box_nr} snapshot {snap_nr}")
 
         # get redshift
-        Dc_to_redshift(rad_dist * un.Mpc)
+        redshift = Dc_to_redshift(ecosmog.cosmo, rad_dist * un.Mpc)
 
         # get angular distance
 
@@ -664,7 +666,8 @@ class RayRamses(Simulation):
             "y": pos[:, 1],
             "z": pos[:, 2],
             "Dc": rad_dist,
-            "Dc": rad_dist / (1 + redshift),
+            "Da": rad_dist / (1 + redshift),
+            "redshift": redshift,
             "theta1_deg": theta1_deg + opening_angle / 2,
             "theta1_pix": _degree_to_pixel(theta1_deg + opening_angle/2, opening_angle, npix),
             "theta2_deg": theta2_deg + opening_angle / 2,
@@ -690,6 +693,7 @@ def _degree_to_pixel(deg: np.ndarray, opening_angle, npix) -> np.ndarray:
     return np.ceil(deg * npix / opening_angle).astype(int)
 
 
-def Dc_to_redshift(Dc: un.quantity.Quantity,) -> float:
+def Dc_to_redshift(cosmo: astropy.cosmology, Dc: un.quantity.Quantity,) -> np.array:
     """ Return redshift at comoving distance [Mpc] """
-    return z_at_value(cosmo.comoving_distance, D_c)
+    return np.array([z_at_value(cosmo.comoving_distance, dist) for dist in Dc])
+

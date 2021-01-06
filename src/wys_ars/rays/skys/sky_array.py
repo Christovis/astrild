@@ -225,14 +225,14 @@ class SkyArray:
             "theta_200c": halo.r200_deg,
             "M_200c": halo.m200,
             "c_200c": halo.c_NFW,
-            "angu_diam_dist": halo.rad_dist,
+            "angu_diam_dist": halo.Dc,
         }
 
         # set quantity label of SkyArray and method variable
         if to == "dT":
             quantity = "rs"
             get_analytical_map = SkyUtils.NFW_temperature_perturbation_map
-            halo_dict["vel"] = [halo.theta1_vel, halo.theta2_vel]
+            halo_dict["vel"] = [halo.theta1_tv, halo.theta2_tv]
         elif to == "alpha":
             quantity = "alpha"
             get_analytical_map = SkyUtils.NFW_deflection_angle_map
@@ -280,7 +280,7 @@ class SkyArray:
             "r200_pix",
             "m200",
             "c_NFW",
-            "rad_dist",
+            "Dc",
             "theta1_pix",
             "theta2_pix",
         ]].to_dict(orient='list')
@@ -289,8 +289,8 @@ class SkyArray:
         # set quantity label of SkyArray and method variable
         if to == "dT":
             quantity = "rs"
-            halo_dict["theta1_vel"] = halo_cat["theta1_vel"].values
-            halo_dict["theta2_vel"] = halo_cat["theta2_vel"].values
+            halo_dict["theta1_tv"] = halo_cat["theta1_tv"].values
+            halo_dict["theta2_tv"] = halo_cat["theta2_tv"].values
         elif to == "alpha":
             quantity = "alpha"
         else:
@@ -363,11 +363,11 @@ class SkyArray:
             "r200_pix",
             "m200",
             "c_NFW",
-            "rad_dist",
+            "Dc",
             "theta1_pix",
             "theta2_pix",
-            "theta1_vel",
-            "theta2_vel",
+            "theta1_tv",
+            "theta2_tv",
         ]].to_dict(orient='list')
         halo_idx = range(len(halo_dict["m200"]))
         

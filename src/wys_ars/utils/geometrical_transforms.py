@@ -129,9 +129,11 @@ def radial_coordinate_in_lc(pos: np.ndarray) -> np.array:
 
 def angular_coordinate_in_lc(pos: np.ndarray, unit="deg") -> tuple:
     """ Angular coordinates with respect to z-axis, [rad/deg] """
-    theta1_deg = np.arctan(pos[:, 0] / pos[:, 2])
-    theta2_deg = np.arctan(pos[:, 1] / pos[:, 2])
+    theta1 = np.arctan(pos[:, 0] / pos[:, 2])
+    theta2 = np.arctan(pos[:, 1] / pos[:, 2])
     if unit == "deg":
-        theta1_deg *= 180/np.pi
-        theta2_deg *= 180/np.pi
-    return theta1_deg, theta2_deg
+        theta1 *= 180/np.pi
+        theta2 *= 180/np.pi
+    elif unit == "rad":
+        pass
+    return theta1, theta2

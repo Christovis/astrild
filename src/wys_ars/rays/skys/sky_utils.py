@@ -105,7 +105,7 @@ class SkyUtils:
                     halo_cat["m200"][idx],
                     halo_cat["c_NFW"][idx],
                     [halo_cat["theta1_vel"][idx], halo_cat["theta2_vel"][idx]],
-                    halo_cat["rad_dist"][idx] * 0.6774,
+                    halo_cat["Dc"][idx] * 0.6774,
                     npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
                 )
                 map_array = SkyUtils.add_patch_to_map(
@@ -126,7 +126,7 @@ class SkyUtils:
                     halo_cat["r200_deg"][idx],
                     halo_cat["m200"][idx],
                     halo_cat["c_NFW"][idx],
-                    halo_cat["rad_dist"][idx] * 0.6774,
+                    halo_cat["Dc"][idx] * 0.6774,
                     npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
                 )
                 map_array = SkyUtils.add_patch_to_map(
@@ -278,6 +278,39 @@ class SkyUtils:
         alpha_map = alpha_map.real
         alpha_map[abs(alpha_map) > 100] = 0.  # remove unphysical results
         return alpha_map
+
+    #@LOS_integrate
+    #def rho_2D(R, rho_s, R_s):
+    #    """
+    #    3D NFW profile intgrated along the line of sight
+    #    Returns
+    #    -------
+    #    surface mass density: [M_sun/Mpc^2]
+    #    """
+    #    return rho_3D(R, rho_s, R_s)
+
+
+    #def LOS_integrate(profile_3D, *args, **kwargs):
+    #    """integrate along the line of sight for all 3D r's that correspond to the 2D R"""
+    #    # extract R
+    #    R = args[0]
+    #    args = args[1:]
+    #    #TODO: Add support for R_vec too
+    #    # see if R is a scalar or a list (array)
+    #    R_is_scalar = False
+    #    if not hasattr(R, "__iter__"):
+    #        R_is_scalar = True
+    #        R = [R]
+    #    # integrate along LOS for each R
+    #    LOS_integrated = []
+    #    for R_i in R:
+    #        #TODO: Take f outside and profile the funtion
+    #        f = lambda r: profile_3D(r, *args, **kwargs) * 2. * r / np.sqrt(r ** 2 - R_i ** 2)
+    #        LOS_integrated.append(integrate.quad(f, R_i, np.inf, epsabs=0., epsrel=1.e-2)[0])
+    #    # if R was a scalar, return a scalar
+    #    if R_is_scalar:
+    #        LOS_integrated = LOS_integrated[0]
+    #    return np.asarray(LOS_integrated)
 
     def convert_code_to_phy_units(
         quantity: str, map_df: pd.DataFrame
