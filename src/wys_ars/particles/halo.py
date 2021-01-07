@@ -559,7 +559,10 @@ class Halos:
 
     @staticmethod
     def get_nearest_neighbours(
-        df: pd.DataFrame, target_id: int, dmax: int,
+        df: pd.DataFrame,
+        target_id: int,
+        dmax: Optional[int] = None,
+        extent: Optional[int] = None,
     ) -> tuple:
         """
         Args:
@@ -572,6 +575,10 @@ class Halos:
         """
         pos = df[["theta1_deg", "theta2_deg"]].values
         pos_i = df[df["id"] == target_id][["theta1_deg", "theta2_deg"]].values
+        if dmax is None:
+            dmax = df[df["id"] == target_id]["r200_deg"].values
+        if extent is not None:
+            dmax *= extent
         if len(pos_i.shape) == 1:
             pos_i = pos_i[np.newaxis, :]
         btree = BallTree(pos)
