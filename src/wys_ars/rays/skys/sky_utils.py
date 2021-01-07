@@ -104,7 +104,7 @@ class SkyUtils:
                     halo_cat["r200_deg"][idx],
                     halo_cat["m200"][idx],
                     halo_cat["c_NFW"][idx],
-                    [halo_cat["theta1_vel"][idx], halo_cat["theta2_vel"][idx]],
+                    [halo_cat["theta1_tv"][idx], halo_cat["theta2_tv"][idx]],
                     halo_cat["Dc"][idx] * 0.6774,
                     npix = int(2 * halo_cat["r200_pix"][idx] * extent) + 1,
                 )

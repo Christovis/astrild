@@ -10,6 +10,11 @@ from halotools import mock_observables as mo
 
 
 class TPCF:
+    """
+    Two Point Correlation Function
+    in redshift space
+    """
+
     def compute(
         pos: np.ndarray,
         vel: np.ndarray,
