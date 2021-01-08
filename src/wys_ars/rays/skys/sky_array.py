@@ -412,10 +412,8 @@ class SkyArray:
                 f"ncpus={ncpus} is not valid. Please enter a value " +\
                 ">0 for ncpus or -1 to use all available cores."
             )
-        elif ncpus == -1:
-            self._ncpus = ncpus_available
-        else:
-            self._ncpus = val
+        elif ncpus == -1: self._ncpus = ncpus_available
+        else: self._ncpus = val
 
 
     @property
@@ -493,10 +491,8 @@ class SkyArray:
         """
         img = self._manage_img_data(img, orig_data)
         img = transform.resize(img, (npix, npix), anti_aliasing=True)
-        if rtn:
-            return img
-        else:
-            self.data[of] = img
+        if rtn: return img
+        else: self.data[of] = img
 
     
     def crop(
@@ -602,8 +598,26 @@ class SkyArray:
             row_tiles.append(np.hstack((tiles[start:end])))
         row_tiles = np.asarray(row_tiles)
         img = np.vstack((row_tiles))
-        if rtn:
-            return img
+        if rtn: return img
+
+    
+    def substract_mean(
+        self,
+        of: Optional[str] = None,
+        img: Optional[np.ndarray] = None,
+        rtn: bool = False,
+        orig_data: str = None,
+    ) -> Union[np.ndarray, None]:
+        """
+        Centre values of map on it's mean value.
+        """
+        if of:
+            assert of in list(self.data.keys()), "Map does not exist."
+            img = self.data[of]
+        img = self._manage_img_data(img, orig_data)
+        img -= np.mean(img)
+        if rtn: return img
+        else: self.data[of] = img
 
 
     def filter(
@@ -644,10 +658,8 @@ class SkyArray:
             clas = getattr(module, "Filters")
             fct = getattr(clas, filter_name)
             img = fct(img, self._opening_angle * un.deg, **args)
-        if rtn:
-            return img
-        else:
-            self.data[("_").join(map_name)] = img
+        if rtn: return img
+        else: self.data[("_").join(map_name)] = img
 
 
     def create_galaxy_shape_noise(
@@ -723,15 +735,14 @@ class SkyArray:
         #cmb = nmt.synfast_flat(
         #    Nx, Ny, Lx, Ly, cls=np.array([cl_tt_cmb]), spin_arr=np.array([0])
         #)[0]
-        if rtn:
-            return cmb
-        else:
-            self.data["cmb"] = cmb
+        if rtn: return cmb
+        else: self.data["cmb"] = cmb
 
 
     def add_cmb(
         self,
-        filepath_cl: str,
+        filepath_cl: Optional[str] = None,
+        filepath_cmb: Optional[str] = None,
         on: str = "orig",
         lmax: Optional[float] = None,
         rnd_seed: Optional[int] = None,
@@ -740,10 +751,20 @@ class SkyArray:
     ) -> np.ndarray:
         """
         Args:
+            filepath_cl:
+            on:
+            lmax:
+            rnd_seed:
+            rtn:
+            overwrite:
+        
+        Returns:
         """
         if "isw" in self.quantity:
             if "cmb" not in self.data.keys():
-                self.create_cmb(filepath_cl, lmax, rnd_seed)
+                try: self.create_cmb(filepath_cl, lmax, rnd_seed)
+                except: 
+                    self.data["cmb"] = np.load(filepath_cmb)
             _map = self.data[on] + self.data["cmb"]
             if rtn:
                 return _map
@@ -843,10 +864,7 @@ class SkyArray:
         Returns:
             cimg: pointer to (new) memory location.
         """
-        if orig_data == "shallow":
-            cimg = copy.copy(img)
-        elif orig_data == "deep":
-            cimg = copy.deepcopy(img)
-        else:
-            cimg = img
+        if orig_data == "shallow": cimg = copy.copy(img)
+        elif orig_data == "deep": cimg = copy.deepcopy(img)
+        else: cimg = img
         return cimg
