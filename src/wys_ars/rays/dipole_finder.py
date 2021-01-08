@@ -17,7 +17,6 @@ from lenstools import ConvergenceMap
 
 from wys_ars.io import IO
 from wys_ars.rays.skys import SkyArray
-from wys_ars.rays.utils.filters import Filters
 from wys_ars.rays.utils import object_selection
 
 default_filter_dipole_identification = {
@@ -26,13 +25,13 @@ default_filter_dipole_identification = {
     "gaussian_low_pass": {"abbrev": "lpf", "theta_i": 1},
 }
 default_filter_dipole_vel_tx = {
-    "gaussian_high_pass": {"theta_i": 5 * un.arcmin},  # [arcmin]
-    "gaussian_first_derivative": {"theta_i": 1, "direction": 1},
+    "gaussian_high_pass": {"fwhm_i": 5 * un.arcmin},  # [arcmin]
+    "gaussian_third_derivative": {"theta_i": 1, "direction": 1},
     "apodization": {"theta_i": None},
 }
 default_filter_dipole_vel_ty = {
-    "gaussian_high_pass": {"theta_i": 5 * un.arcmin},  # [arcmin]
-    "gaussian_first_derivative": {"theta_i": 1, "direction": 0},
+    "gaussian_high_pass": {"fwhm_i": 5 * un.arcmin},  # [arcmin]
+    "gaussian_third_derivative": {"theta_i": 1, "direction": 0},
     "apodization": {"theta_i": None},
 }
 
@@ -422,16 +421,28 @@ class Dipoles:
                 )
                 for k in keys_alpha
             ]
+            # centre dT-map on average temperature within R200
+            [
+                dT_zoom[k].filter(
+                    filter_dsc={
+                        "aperture_photometry": {"abbrev": "ap", "alpha": dip.r200_deg * un.deg}
+                    },
+                    on="orig",
+                    rtn=False,
+                    orig_data="shallow",
+                )
+                for k in range(len(dT_zoom))
+            ]
             # filter images to remove CMB+Noise and enhance dipole signal
-            filter_dsc_x["gaussian_first_derivative"]["theta_i"] = (
+            filter_dsc_x["gaussian_third_derivative"]["theta_i"] = (
                 2 * dip.r200_deg * un.deg
             )
-            filter_dsc_y["gaussian_first_derivative"]["theta_i"] = (
+            filter_dsc_y["gaussian_third_derivative"]["theta_i"] = (
                 2 * dip.r200_deg * un.deg
             )
             for idx, filtr in enumerate([filter_dsc_x, filter_dsc_y]):
                 dT_zoom[idx] = dT_zoom[idx].filter(
-                    filtr, on="orig", rtn=True
+                    filtr, on="orig_ap", rtn=True
                 )
                 alpha_zoom[idx] = alpha_zoom[idx].filter(
                     filtr, on="orig", rtn=True
@@ -534,10 +545,10 @@ class Dipoles:
                 in x,y-direction.
         Returns:
         """
-        filter_dsc_x["gaussian_first_derivative"]["theta_i"] = (
+        filter_dsc_x["gaussian_third_derivative"]["theta_i"] = (
             2 * dipole.r200_deg * un.deg
         )
-        filter_dsc_y["gaussian_first_derivative"]["theta_i"] = (
+        filter_dsc_y["gaussian_third_derivative"]["theta_i"] = (
             2 * dipole.r200_deg * un.deg
         )
         keys = list(skyarrays.keys())
