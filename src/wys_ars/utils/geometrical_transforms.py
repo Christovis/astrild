@@ -21,16 +21,20 @@ def Dc_to_redshift(Dc: float, cosmo, units=un.Mpc) -> float:
 
 def radius_to_angsize(radius: float, Da: float, arcmin: bool=True) -> float:
     """
-    Calculate the angular radius (theta) of the halo from its radius and 
+    Calculate the angular radius (theta) of the halo from its radius and
     angular diameter distance (Da).
 
     Note: radius and D_a must have the same units
 
     Args:
+        radius: [Mpc]
+        Da: angular diameter distance, [Mpc]
+        arcmin: Setting for unit of returning value.
+
     Returns:
         if arcmin == True: return the value in arcmin
     """
-    ang_size = np.true_divide(radius, D_a)
+    ang_size = np.true_divide(radius, Da)
     if arcmin: ang_size = rad2arcmin(ang_size)
     return ang_size
 

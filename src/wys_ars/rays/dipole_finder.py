@@ -435,10 +435,10 @@ class Dipoles:
             ]
             # filter images to remove CMB+Noise and enhance dipole signal
             filter_dsc_x["gaussian_third_derivative"]["theta_i"] = (
-                2 * dip.r200_deg * un.deg
+                1 * dip.r200_deg * un.deg
             )
             filter_dsc_y["gaussian_third_derivative"]["theta_i"] = (
-                2 * dip.r200_deg * un.deg
+                1 * dip.r200_deg * un.deg
             )
             for idx, filtr in enumerate([filter_dsc_x, filter_dsc_y]):
                 dT_zoom[idx] = dT_zoom[idx].filter(
