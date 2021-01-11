@@ -172,6 +172,7 @@ class SkyUtils:
         limg[ylim[0]:ylim[1], xlim[0]:xlim[1]] += simg
         return limg
 
+
     def NFW_temperature_perturbation_map(
         theta_200c: float,
         M_200c: float,
@@ -191,7 +192,7 @@ class SkyUtils:
             vel: transverse to the line-of-sight velocity, [km/sec]
 
         Returns:
-            Temperature perturbation map, \Delta T / T_CMB
+            Temperature perturbation map, \Delta T / T_CMB, [-]
         """
         dt_map = np.zeros((npix, npix))
         for direc in direction:
@@ -208,6 +209,7 @@ class SkyUtils:
             )
             dt_map += - alpha_map * vel[direc] / c_light
         return dt_map
+
 
     def NFW_deflection_angle_map(
         theta_200c: float,
@@ -312,17 +314,30 @@ class SkyUtils:
     #        LOS_integrated = LOS_integrated[0]
     #    return np.asarray(LOS_integrated)
 
+
     def convert_code_to_phy_units(
         quantity: str, map_df: pd.DataFrame
     ) -> pd.DataFrame:
         """
         Convert from RayRamses code units to physical units.
+
+        Args:
+            quantity:
+            map_df:
+
+        Returns:
+            Dimensionless values converted from code to physical units.
+            shear_: [-]
+            deflt_: double check
+            kappa_: [-]
+            isw_rs: \Delta T / T_cmb [-]
         """
         if quantity in ["shear_x", "shear_y", "deflt_x", "deflt_y", "kappa_2"]:
             map_df.loc[:, [quantity]] /= c_light ** 2
         elif quantity in ["isw_rs"]:
             map_df.loc[:, [quantity]] /= c_light ** 3
         return map_df
+
 
     def convert_deflection_to_shear(
         alpha1: np.ndarray, alpha2: np.ndarray, npix: int, opening_angle: float
