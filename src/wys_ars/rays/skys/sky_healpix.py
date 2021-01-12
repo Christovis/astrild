@@ -189,6 +189,7 @@ class SkyHealpix:
         lmax: int = 3000,
         opening_angle: int = 41253,
         key: Optional[str] = None, 
+        rnd_seed: Optional[int] = None,
     ) -> "SkyHealpix":
         """
         Args:
@@ -200,6 +201,7 @@ class SkyHealpix:
             opening_angle:
             key:
         """
+        np.random.seed(rnd_seed)
         file_extension = cl_file.split(".")[-1]
         assert file_extension in ["npz", "npy"], SkyHealpixWarning(
             f"The file formart {file_extension} is not supported."
@@ -223,12 +225,14 @@ class SkyHealpix:
         opening_angle: int = 41253,
         dir_in: Optional[str] = None,
         cl_file: Optional[str] = None,
+        rnd_seed: Optional[int] = None,
     ) -> "SkyHealpix":
         """
         Args:
             opening_angle:
                 [deg^2]
         """
+        np.random.seed(rnd_seed)
         dirs = {"sim": dir_in}
         map_array = hp.sphtfunc.synfast(cl_array, nside=nside, lmax=lmax)
         return cls(map_array, opening_angle, quantity, dirs, cl_file)
