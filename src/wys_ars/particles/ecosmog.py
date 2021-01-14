@@ -101,7 +101,6 @@ class Ecosmog(Simulation):
             file_dsc:
                 File describtion of files to use for analyzes
         """
-        print("dtfe asser ------> ", snap_nrs, self.dir_nrs)
         # filter snapshot numbers
         if snap_nrs:
             assert set(snap_nrs) < set(self.dir_nrs), EcosmogWarning(

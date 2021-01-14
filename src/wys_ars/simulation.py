@@ -1,5 +1,6 @@
 import os, re, glob
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional, Type, Union
 
 import numpy as np
@@ -56,11 +57,13 @@ class Simulation:
         """
         return [elem for elem in dir_sim.split('/') if len(elem) > 0][-1]
 
+
     def _get_all_files(self, file_dsc: Dict[str, str], directory: str,) -> List[str]:
         """ """
         template = f"{directory}/{file_dsc['root']}_*{file_dsc['extension']}"
         files = glob.glob(template)
         return files
+
 
     def get_file_nrs(
         self,
@@ -117,17 +120,29 @@ class Simulation:
             files[file_dsc["root"]] = [files[file_dsc["root"]][idx] for idx in idxs]
         return list(files.values())[0]
 
-    def _get_all_paths(self) -> List[str]:
-        """ """
+
+    def _get_all_paths(self, dir_root: Optional[str]=None,) -> List[str]:
+        """
+        Args:
+        Returns:
+        """
+        if dir_root is None: dir_root = self.dir_root
         # list all designations starting with dir_root
-        dirs = glob.glob(self.dirs["sim"] + self.dir_root + "_*")
+        dirs = glob.glob(self.dirs["sim"] + dir_root + "_*")
         # filter out directories
         dirs = [path for path in dirs if "." not in path]
         return dirs
 
-    def get_dir_nrs(self, sort: bool) -> np.array:
-        """ """
-        _dirs = self._get_all_paths()
+
+    def get_dir_nrs(
+        self, dir_root: Optional[str]=None, sort: bool=True,
+    ) -> np.array:
+        """
+        Args:
+        Returns:
+        """
+        if dir_root is None: dir_root = self.dir_root
+        _dirs = self._get_all_paths(dir_root)
         dir_ids = np.array(
             [int(re.findall(r"\d+", dire.split("/")[-1])[0]) for dire in _dirs]
         )
@@ -135,11 +150,17 @@ class Simulation:
             dir_ids = np.sort(dir_ids)
         return dir_ids
 
+
     def get_dir_paths(self, dir_ids: list, dir_root: str) -> List[str]:
+        """
+        Args:
+        Returns:
+        """
+        if dir_root is None: dir_root = self.dir_root
         dirs = []
         if dir_ids is None:
-            dirs = self._get_all_paths()
-            dir_ids = self.get_dir_nrs(sort=False)
+            dirs = self._get_all_paths(dir_root)
+            dir_ids = self.get_dir_nrs(dir_root, sort=False)
             idxs = np.argsort(dir_ids)
             dirs = [dirs[idx] for idx in idxs]
         else:
@@ -152,3 +173,8 @@ class Simulation:
                 )
                 dirs.append(_dir)
         return dirs
+
+
+    @staticmethod
+    def remove_files(files: list) -> None:
+        [Path(f).unlink() for f in files]
