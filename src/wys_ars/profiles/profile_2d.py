@@ -259,7 +259,7 @@ def mean_and_interpolate(
     return mean_profile
 
 
-def _blockshaped(arr, nrows, ncols):
+def _blockshaped(arr: np.ndarray, nrows: int, ncols: int) -> np.ndarray:
     """
     Return an array of shape (n, nrows, ncols) where
     n * nrows * ncols = arr.size
@@ -282,7 +282,7 @@ def bootstrapping(
     npix: int,
     extend: float,
     nr_rad_bins: int,
-) -> None:
+) -> np.ndarray:
     """
     Find bootstrap errors on profiles, given as the 16th and 84th percentiles
 

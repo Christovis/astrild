@@ -185,7 +185,9 @@ def interpolate(profile, objects_rad, args):
     return profile
 
 
-def mean_and_interpolate(profile, objects_rad, args):
+def mean_and_interpolate(
+    profile: np.ndarray, objects_rad: np.ndarray, args,
+) -> np.ndarray:
     """
     Get the mean profile of all the profiles of objects
 
@@ -217,7 +219,7 @@ def mean_and_interpolate(profile, objects_rad, args):
     return mean_profile
 
 
-def _blockshaped(arr, nrows, ncols):
+def _blockshaped(arr: np.ndarray, nrows: int, ncols: int) -> np.ndarray:
     """
     Return an array of shape (n, nrows, ncols) where
     n * nrows * ncols = arr.size
@@ -233,13 +235,15 @@ def _blockshaped(arr, nrows, ncols):
     )
 
 
-def bootstrapping(profiles, mean_profile, objects, args):
+def bootstrapping(
+    profiles: list, mean_profile: np.ndarray, objects, args
+) -> np.ndarray:
     """
     Find bootstrap errors on profiles, given as the 16th and 84th percentiles
 
     Args:
-        profiles: list
-            object profiles
+        profiles: object profiles
+    Returns:
     """
     num_objects = len(profiles)
 
