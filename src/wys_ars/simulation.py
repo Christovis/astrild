@@ -36,11 +36,18 @@ class Simulation:
         self.dirs = {"sim": dir_sim, "out": dir_out}
         self.name = self._get_simname_from_dirsim(dir_sim)
         self.file_dsc = file_dsc
-        self.dir_root = dir_root
-        if dir_root is not None:
+        
+        if dir_root is None:
+            self.dir_root = "sim"
+        elif dir_root is not None:
+            self.dir_root = dir_root
             self.dir_nrs = self.get_dir_nrs(sort=True)
             self.dirs[dir_root] = self.get_dir_paths(None, dir_root)
-        if self.file_dsc["root"] is not None:
+        
+        if self.file_dsc["root"] is None:
+            self.file_nrs = None
+            self.files = {}
+        elif self.file_dsc["root"] is not None:
             self.file_nrs = self.get_file_nrs(self.file_dsc, self.dirs["sim"], "max", True)
             self.files = {
                 self.file_dsc["root"]: self.get_file_paths(
@@ -58,9 +65,14 @@ class Simulation:
         return [elem for elem in dir_sim.split('/') if len(elem) > 0][-1]
 
 
-    def _get_all_files(self, file_dsc: Dict[str, str], directory: str,) -> List[str]:
+    def _get_all_files(
+        self, file_dsc: Dict[str, str], directory: Optional[str] = None,
+    ) -> List[str]:
         """ """
+        if directory is None: directory = self.dirs["sim"]
+        print(directory, file_dsc)
         template = f"{directory}/{file_dsc['root']}_*{file_dsc['extension']}"
+        print(template)
         files = glob.glob(template)
         return files
 
@@ -68,11 +80,22 @@ class Simulation:
     def get_file_nrs(
         self,
         file_dsc: dict,
-        directory: str,
+        directory: Optional[str] = None,
         uniques: Union[None, str] = "max",
         sort: bool = False,
     ) -> Union[np.array, Dict[int, np.array]]:
-        """ """
+        """
+        Args:
+            file_dsc:
+            directory:
+            uniques: If the filenames matching to file_dsc have multiple numbers
+                which have to be distinguished, this argument provides an indication
+                which of the numbers to pick as file id.
+            sort:
+
+        Returns:
+        """
+        if directory is None: directory = self.dirs["sim"]
         _files = self._get_all_files(file_dsc, directory)
 
         if len(_files) == 0:
@@ -92,10 +115,11 @@ class Simulation:
             file_ids = np.sort(file_ids)
         return file_ids
 
+
     def get_file_paths(
         self,
         file_dsc: Optional[dict] = None,
-        directory: str = None,
+        directory: Optional[str] = None,
         uniques: Union[None, str] = "max",
     ) -> Union[List[str], Dict[int, List[str]]]:
         """
@@ -103,6 +127,7 @@ class Simulation:
         By default they are searched first in the simulations root directory,
         if nothing found search in sim-config/dir_root.
         """
+        if directory is None: directory = self.dirs["sim"]
         files = {}
         files[file_dsc["root"]] = self._get_all_files(file_dsc, directory)
         if len(files[file_dsc["root"]]) == 0:
@@ -121,7 +146,7 @@ class Simulation:
         return list(files.values())[0]
 
 
-    def _get_all_paths(self, dir_root: Optional[str]=None,) -> List[str]:
+    def _get_all_paths(self, dir_root: Optional[str] = None,) -> List[str]:
         """
         Args:
         Returns:

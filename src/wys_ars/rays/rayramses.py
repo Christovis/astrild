@@ -65,6 +65,7 @@ class RayRamses(Simulation):
         self.config = config
         self.cosmo = cosmo
 
+
     def compress_snapshot(
         self,
         fields: list,
@@ -145,6 +146,7 @@ class RayRamses(Simulation):
                 ray_nr,
             )
             ray_collect_df.to_hdf(file_out, key="df", mode="w")
+
 
     def sum_snapshots(
         self,
@@ -231,6 +233,7 @@ class RayRamses(Simulation):
 
         self._merged_snapshots_to_file(ray_df_sum, dir_out, integration_range)
 
+
     def _get_box_and_ray_nrs(self, integration_range: dict) -> np.ndarray:
         """
         Get all box and ray-snapshot numbers for selected range.
@@ -261,6 +264,7 @@ class RayRamses(Simulation):
             self.complete_lc = False
 
         return self.ray_info_df.index.values
+
 
     def _translate_redshift(
         self,
@@ -307,6 +311,7 @@ class RayRamses(Simulation):
         )
         return quantity_shift
 
+
     def _kernel_function(self, x: float, x_s: float) -> float:
         """
         Args:
@@ -319,6 +324,7 @@ class RayRamses(Simulation):
         """
         g = (x_s - x) * x / x_s
         return g
+
 
     def _merged_snapshots_to_file(
         self, ray_df_sum: pd.DataFrame, dir_out: str, integration_range: dict
