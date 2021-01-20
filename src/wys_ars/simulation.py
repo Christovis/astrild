@@ -70,9 +70,7 @@ class Simulation:
     ) -> List[str]:
         """ """
         if directory is None: directory = self.dirs["sim"]
-        print(directory, file_dsc)
         template = f"{directory}/{file_dsc['root']}_*{file_dsc['extension']}"
-        print(template)
         files = glob.glob(template)
         return files
 
