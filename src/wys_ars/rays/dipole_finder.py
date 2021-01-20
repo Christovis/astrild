@@ -381,15 +381,18 @@ class Dipoles:
                 unfiltered isw-rs map [-] and deflection angle map [rad].
                 The maps can contain either the individual x,y-components
                 of the vector fields or their sum.
-            filter_dsc_x,y: Dictionary of filters applied to cropped map
-                in x,y-direction.
             extend: The size of the map from which the trans-vel is calculated
                 in units of R200 of the associated halo.
+            ncpus: number of cpus to use for parallel processing. if -1 than all
+                available cpus are used.
+            filter_dsc_x,y: Dictionary of filters applied to cropped map
+                in x,y-direction.
         
         Returns:
         """
         assert any("isw_rs" in s for s in list(skyarrays.keys()))
         assert any("alpha" in s for s in list(skyarrays.keys()))
+        self.ncpus(ncpus)
         
         def copy_or_sort_keys(keys: str, get: str) -> list:
             _kk = [k for k in keys if get in k]
@@ -474,14 +477,14 @@ class Dipoles:
         else:
             print(
                 f"Calculate the trans. vel. of {len(dip_index)} dipoles " +\
-                f"with {ncpus} cpus"
+                f"with {self._ncpus} cpus"
             )
-            if ncpus == 1:
+            if self._ncpus == 1:
                 _vt = []
                 for idx, dip in self.data.iloc[dip_index].iterrows():
                     _vt.append(integration(dip))
             else:
-                _vt = Parallel(n_jobs=ncpus)(
+                _vt = Parallel(n_jobs=self._ncpus)(
                     delayed(integration)(dip)
                     for idx, dip in self.data.iloc[dip_index].iterrows()
                 )
