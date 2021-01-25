@@ -72,6 +72,7 @@ class Dipoles:
 
     def __init__(self, dipoles: pd.DataFrame):
         self.data = dipoles
+        self._ncpus = 1
 
     @classmethod
     def from_sky(
@@ -353,12 +354,12 @@ class Dipoles:
 
     @ncpus.setter
     def ncpus(self, val: int):
-        if (ncpus == 0) or (ncpus < -1):
+        if (val == 0) or (val < -1):
             raise ValueError(
                 f"ncpus={ncpus} is not valid. Please enter a value " +\
                 ">0 for ncpus or -1 to use all available cores."
             )
-        elif ncpus == -1:
+        elif val == -1:
             self._ncpus = ncpus_available
         else:
             self._ncpus = val
@@ -392,7 +393,7 @@ class Dipoles:
         """
         assert any("isw_rs" in s for s in list(skyarrays.keys()))
         assert any("alpha" in s for s in list(skyarrays.keys()))
-        self.ncpus(ncpus)
+        self._ncpus = ncpus
         
         def copy_or_sort_keys(keys: str, get: str) -> list:
             _kk = [k for k in keys if get in k]

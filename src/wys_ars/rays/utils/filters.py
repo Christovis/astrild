@@ -195,6 +195,7 @@ class Filters:
         Returns:
         """
         img = ConvergenceMap(data=img, angle=theta.to(un.deg))
+        fwhm_i = fwhm_i.to(un.arcmin).value
         if theta_i is None and fwhm_i is None:
             raise ValueError(f"Either theta_i or fwhm_i must be set for smoothing scale.")
         elif theta_i is None:
@@ -202,15 +203,16 @@ class Filters:
         else:
             sigma_i = theta_i
 
+        sigma_i *= un.arcmin
         if len(img.data) < 500:
             # for image with less than 500^2 images real-space is faster
             img = img.smooth(
-                scale_angle=sigma_i.to(un.arcmin), kind="gaussian", **kwargs
+                scale_angle=sigma_i, kind="gaussian", **kwargs
             )
         else:
             # for larger images FFT is optimal
             img = img.smooth(
-                scale_angle=sigma_i.to(un.arcmin), kind="gaussianFFT", **kwargs
+                scale_angle=sigma_i, kind="gaussianFFT", **kwargs
             )
         return img.data
 
