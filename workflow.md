@@ -18,5 +18,5 @@
 # Transverse velocity measurement
 1. apply gaussian smoothing filter of fwhm = 1 arcmin on full DeltaT map
 2. apply gaussian high pass filter of fwhm = 5 arcmin on full DeltaT and alpha map
-3. apply DGD3 filter on a cropped DeltaT and alpha map extending 30xR200 from halo centre
-4. apodize using Hann window
+3. [apply](https://github.com/Christovis/wys-ars/blob/9b4d32bfc292cbf5623fc93e00147cddb3200c1f/src/wys_ars/rays/dipole_finder.py#L440) [DGD3 filter](https://github.com/Christovis/wys-ars/blob/787ccf1ce590f31582b962190dacc330f20a7370/src/wys_ars/rays/utils/filters.py#L299) on a cropped DeltaT and alpha map extending 30xR200 from halo centre
+4. apodize using [Hann window](https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.hann.html)
