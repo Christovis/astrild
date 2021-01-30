@@ -4,10 +4,7 @@
 3. pars.set_for_lmax(9000, lens_potential_accuracy=0)
 
 # Creation of CMB flat sky map using Healpy
-1. cart_proj = hp.projector.CartesianProj(lonra=0,latra=20.,xsize=8192,ysize=8192,)
-   map_array = cart_proj.projmap(
-       self.data[of],rot=(0., 0.),vec2pix_func=partial(hp.vec2pix, self._nside),
-   )
+1. [project](https://github.com/Christovis/wys-ars/blob/485c388800e4b2c16ad40694a63bd9f75c30de4d/src/wys_ars/rays/skys/sky_healpix.py#L250) curved full sky CMB map to flat 20x20 deg^2 map
 
 # Creation of ISW-RS map
 1. on-the-fly ray tracing simulations in range z=[0., 6.]
