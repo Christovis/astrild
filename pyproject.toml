@@ -20,7 +20,7 @@ source = ["src", "*/site-packages"]
 
 [tool.coverage.run]
 branch = true
-source = ["wys_ars"]
+source = ["astrild"]
 
 [tool.coverage.report]
 show_missing = true

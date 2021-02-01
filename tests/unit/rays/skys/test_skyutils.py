@@ -9,10 +9,10 @@ from scipy import signal
 from astropy import units as un
 from astropy.constants import sigma_T, m_p, c
 
-from wys_ars.simulation import Simulation
-from wys_ars.rays import SkyMap
-from wys_ars.rays.skys.sky_utils import SkyUtils, SkyNumbaUtils
-from wys_ars import io as IO
+from astrild.simulation import Simulation
+from astrild.rays import SkyMap
+from astrild.rays.skys.sky_utils import SkyUtils, SkyNumbaUtils
+from astrild import io as IO
 
 c_light = c.to("km/s").value
 

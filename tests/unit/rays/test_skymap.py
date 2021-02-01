@@ -4,9 +4,9 @@ from pathlib import Path
 import numpy as np
 import numpy.testing as npt
 
-from wys_ars.simulation import Simulation
-from wys_ars.rays import SkyMap
-from wys_ars import io as IO
+from astrild.simulation import Simulation
+from astrild.rays import SkyMap
+from astrild import io as IO
 
 dir_test_base = Path(__file__).parent.parent.parent.absolute()
 dir_test_data = dir_test_base / "test_data"

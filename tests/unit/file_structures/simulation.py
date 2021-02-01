@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from wys_ars.simulation import Simulation
+from astrild.simulation import Simulation
 
 dir_src = Path(__file__).parent.absolute()
 sim_config_part_times = pd.read_hdf(dir_src / "../../test_data/particle_snapshot_info.h5", key="df")

@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-from wys_ars.simcoll import SimulationCollection as SimColl
+from astrild.simcoll import SimulationCollection as SimColl
 
 dir_src = Path(__file__).parent.absolute()
 sim_config_times = dir_src / "../../test_data/particle_snapshot_info.h5"

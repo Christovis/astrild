@@ -4,8 +4,8 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from wys_ars.rays.skys import SkyArray
-from wys_ars.rays.dipole_finder import Dipoles
+from astrild.rays.skys import SkyArray
+from astrild.rays.dipole_finder import Dipoles
 
 dir_src = Path(__file__).parent.parent.absolute()
 rockstar_df = pd.read_hdf(dir_src / "../../test_data/rockstar_in_lc.h5", key="df")

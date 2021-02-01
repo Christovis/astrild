@@ -10,7 +10,7 @@ from astropy import units as un
 from astropy.constants import sigma_T, m_p, c
 from astropy.cosmology import LambdaCDM
 
-from wys_ars.particles.hutils.mean_pairwise_velocity import make_rsep, mean_pv_from_tv
+from astrild.particles.hutils.mean_pairwise_velocity import make_rsep, mean_pv_from_tv
 
 dist_bins = np.linspace(0, 50, 40)
 particle_nr = 2000

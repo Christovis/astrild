@@ -10,8 +10,8 @@ from astropy import units as un
 from astropy.constants import sigma_T, m_p, c
 from astropy.cosmology import LambdaCDM
 
-from wys_ars.utils import *
-from wys_ars import io as IO
+from astrild.utils import *
+from astrild import io as IO
 
 
 @pytest.fixture(name="cosmo", scope="module")

@@ -7,8 +7,8 @@ import numpy.testing as npt
 
 import camb
 
-from wys_ars.rays.skys import SkyHealpix
-from wys_ars.rays.skys import SkyArray
+from astrild.rays.skys import SkyHealpix
+from astrild.rays.skys import SkyArray
 
 dir_src = Path(__file__).parent.parent.absolute()
 rockstar_df = pd.read_hdf(dir_src / "../../test_data/rockstar_in_lc.h5", key="df")
