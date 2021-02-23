@@ -7,9 +7,9 @@ import numba as nb
 
 import healpy as hp
 import astropy
+from astropy.io import fits
 
 from astrild.io import IO
-
 
 class SkyIO:
     def transform_PandasDataFrame_to_Healpix(
@@ -93,10 +93,17 @@ class SkyIO:
         file_out = ".".join(_file)
         return file_out
 
-    def _array_to_fits(self, map_out: np.ndarray) -> astropy.io.fits:
+    def _array_to_fits(
+        sky,#: Type[SkyArray],
+        filepath: Optional[str] = None,
+    ) -> astropy.io.fits:
         """ Convert maps that in .npy format into .fits format """
         # Convert .npy to .fits
-        data = fits.PrimaryHDU()
-        data.header["ANGLE"] = self.opening_angle  # [deg]
-        data.data = map_out
+        data = fits.ImageHDU()
+        data.header["ANGLE"] = sky.opening_angle  # [deg]
+        data.data = sky.data["orig"]
+        if filepath is not None:
+            data.writeto(filepath)
+        else:
+            return data
         return data
