@@ -16,8 +16,6 @@ __init__.pyc
 src/wys_ars/particles/utils_cython/dist/
 src/wys_ars/particles/utils_cython/build/
 src/wys_ars/particles/utils_cython/pairwise_velocity_routines.egg-info/
-*.so
-*.c
 *.html
 *.html
 
