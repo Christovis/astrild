@@ -15,7 +15,7 @@ from astrild.particles.ecosmog import Ecosmog
 from astrild.particles.hutils import SubFind
 from astrild.particles.hutils import Rockstar
 #from astrild.particles.utils import TPCF
-from astrild.utils.arepo_hdf5_library_2020 import read_hdf5
+from astrild.utils import read_hdf5
 from astrild.io import IO
 
 dir_src = Path(__file__).parent.absolute()

@@ -9,7 +9,7 @@ import pmesh
 #from halotools import mock_observables as mo
 from nbodykit.lab import *
 
-from astrild.utils.arepo_hdf5_library_2020 import read_hdf5
+from astrild.utils import read_hdf5
 
 
 class SubFind:

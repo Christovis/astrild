@@ -6,10 +6,10 @@ import itertools
 from concurrent import futures
 
 from astrild.utils.geometrical_transforms import (
-    get_cart2sph_jacobian,
-    get_sph2cart_jacobian,
-    convert_vec_sph2cart,
-    convert_vec_cart2sph,
+    get_cart_to_sph_jacobian,
+    get_sph_to_cart_jacobian,
+    convert_vec_sph_to_cart,
+    convert_vec_cart_to_sph,
     angular_coordinate_in_lc,
 )
 
