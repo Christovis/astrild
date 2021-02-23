@@ -334,6 +334,11 @@ class SimulationCollection:
                             )
                     else:
                         ray_sum += ray_map
+        
+        if ray_file.split(".")[-1] == "h5":
+            return ray_df_sum
+        else:
+            return ray_sum
 
     def _get_box_and_ray_nrs_for_integration_range(
         self,
@@ -447,7 +452,7 @@ class SimulationCollection:
         """
         if not integration_range["z"]:
             if integration_range["box"][0] == 0:
-                fout = dir_out + "Ray_maps_lc_new_new.h5"
+                fout = dir_out + "Ray_maps_lc.h5"
             elif integration_range["ray"][0] == 0:
                 fout = dir_out + "Ray_maps_box%d.h5" % box_nr
         else:
@@ -460,13 +465,10 @@ class SimulationCollection:
         print(f"Save in -> {fout}")
         ray_df_sum.to_hdf(fout, key="df", mode="w")
 
-
-    def _boxnr_from_simname(simname: Union[str, int]) -> int:
+    def _boxnr_from_simname(self, simname: Union[str, int]) -> int:
         """ Get box number from simulation name """
         if isinstance(simname, str):
             box_nr = int(re.findall(r"\d+", simname)[0])
         elif isinstance(simname, int):
             box_nr = simname
         return box_nr
-
-
