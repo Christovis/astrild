@@ -1,9 +1,28 @@
 import numpy as np
-import numba as nb
 
 from astropy import units as un
 from astropy.constants import c, sigma_T, m_p
 from astropy.cosmology import z_at_value
+
+
+# -------------------------
+# Spherical Transformations
+# -------------------------
+def ell_to_arcmin(ell: float) -> float:
+    """ Convert multipole to arcmin """
+    return np.pi/ell * 180/np.pi * 60
+
+def arcmin_to_ell(arcmin: float) -> float:
+    """ Convert arcmin to multipole """
+    return np.pi/arcmin * 180/np.pi * 60
+
+def arcmin_to_deg(arcmin: float) -> float:
+    """ Convert arcmin to degree """
+    return arcmin / 60
+
+def deg_to_arcmin(deg: float) -> float:
+    """ Convert arcmin to degree """
+    return deg * 60
 
 # ------------------------
 # Distance Transformations
@@ -38,19 +57,18 @@ def radius_to_angsize(radius: float, Da: float, arcmin: bool=True) -> float:
     if arcmin: ang_size = rad2arcmin(ang_size)
     return ang_size
 
-
 # ------------------------
 # Coordinate Transformations
 # ------------------------
-def rad2arcmin(angle: float) -> float:
+def rad_to_arcmin(angle: float) -> float:
     """Convert radians to arcmins"""
     return np.rad2deg(angle)*60
 
-def arcmin2rad(angle: float) -> float:
+def arcmin_to_rad(angle: float) -> float:
     """Convert arcmins to radians"""
     return np.deg2rad(angle/60)
 
-def get_cart2sph_jacobian(th: float, ph: float) -> np.ndarray:
+def get_cart_to_sph_jacobian(th: float, ph: float) -> np.ndarray:
     """
     Calculate the transformation matrix (jacobian) for spherical to
     cartesian coordinates at line of sight (th, ph) [radians] (th is the
@@ -71,7 +89,7 @@ def get_cart2sph_jacobian(th: float, ph: float) -> np.ndarray:
     row3 = np.stack((np.cos(th), -np.sin(th), 0.0 * np.cos(th)))
     return np.squeeze(np.stack((row1, row2, row3)))
 
-def get_sph2cart_jacobian(th: float, ph: float) -> np.ndarray:
+def get_sph_to_cart_jacobian(th: float, ph: float) -> np.ndarray:
     """
     Calculate the transformation matrix (jacobian) for spherical to
     cartesian coordinates.
@@ -85,7 +103,7 @@ def get_sph2cart_jacobian(th: float, ph: float) -> np.ndarray:
     row3 = np.stack((-np.sin(ph), np.cos(ph), 0.0 * np.cos(th)))
     return np.squeeze(np.stack((row1, row2, row3)))
 
-def convert_vec_sph2cart(th: np.ndarray, ph: np.ndarray, vij_sph: np.array) -> tuple:
+def convert_vec_sph_to_cart(th: np.ndarray, ph: np.ndarray, vij_sph: np.array) -> tuple:
     """
     Calculate the cartesian velocity components from the spherical ones.
     Args:
@@ -101,7 +119,7 @@ def convert_vec_sph2cart(th: np.ndarray, ph: np.ndarray, vij_sph: np.array) -> t
     vij_cart = np.einsum('ij...,i...->j...', J, vij_sph.T).T
     return vij_cart
 
-def convert_vec_cart2sph(th: float, ph: float, vij_cart: np.array) -> tuple:
+def convert_vec_cart_to_sph(th: float, ph: float, vij_cart: np.array) -> tuple:
     """
     Calculate the spherical velocity components from the cartesian ones.
     Args:
