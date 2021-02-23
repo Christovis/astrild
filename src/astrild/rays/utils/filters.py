@@ -46,13 +46,15 @@ class Filters:
         Take the average value of the pixels belonging to the disk and
         substract from this average the average value of pixels in a
         ring with bounds [alpha, alpha*sqrt(2)]. This is useful for
-        ISW and RS analyzes when long wave-modes are involved, e.g. due to CMB.
+        kinematic Sunyaev-Zel’dovich effec analyzes when long wave-modes
+        are involved, e.g. due to CMB.
         arxiv: 1607.02139, Sec. III.B
 
         Args:
             img: flat 2D SkyArray-image
             theta: opening angle of image (fov), [some angular distance]
             alpha: aperture, for kSz it can be 1.8 arcmin
+
         Returns:
         """
         # get distances of pixels in units of pixels
@@ -146,7 +148,11 @@ class Filters:
 
 
     def apodization(
-        img: np.ndarray, theta: float, theta_i: Optional[float] = None
+        img: np.ndarray,
+        theta: float,
+        theta_i: Optional[float] = None,
+        r200: Optional[un.quantity.Quantity] = None,
+        suppress_radius: Optional[float] = None,
     ) -> np.ndarray:
         """
         Suppress image values beyond theta_i from the centre of the image.
@@ -160,13 +166,15 @@ class Filters:
 
         Returns:
         """
-        npix = len(img)
-        window = np.outer(
-            signal.hann(npix),
-            signal.hann(npix),
-            # signal.general_gaussian(npix, p=6, sig=theta_i),
-            # signal.general_gaussian(npix, p=6, sig=theta_i),
-        )
+        def exponential() -> np.ndarray:
+            x1edge = np.linspace(1, _npix, _npix) - _npix / 2 - 0.5
+            x, y = np.meshgrid(x1edge, x1edge)
+            dist = np.sqrt(x ** 2 + y ** 2)
+            suppress_radius = suppression_R * R_200c
+            return np.exp(-(dist / suppress_radius) ** 3)
+        
+        _npix = len(img)
+        window = np.outer(signal.hann(_npix), signal.hann(_npix))
         return img * window
 
 
