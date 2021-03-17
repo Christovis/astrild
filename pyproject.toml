@@ -1,8 +1,13 @@
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
 [tool.black]
 line-length = 79
 include = '\.pyi?$'
 exclude = '''
 /(
+    \.eggs
     \.git
   | \.hg
   | \.mypy_cache
@@ -14,14 +19,3 @@ exclude = '''
   | dist
 )/
 '''
-
-[tool.coverage.paths]
-source = ["src", "*/site-packages"]
-
-[tool.coverage.run]
-branch = true
-source = ["astrild"]
-
-[tool.coverage.report]
-show_missing = true
-#fail_under = 100

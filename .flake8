@@ -1,10 +1,5 @@
-[flake8]
-select = ANN,B,B9,BLK,C,D,DAR,E,F,I,S,W
-ignore = E203, E266, E501, W503, F403, F401
-max-line-length = 80
+[flake8]                                                                                             
+ignore = E203, E266, E501, W503, F403, F401, E731
+max-line-length = 79
 max-complexity = 18
 select = B,C,E,F,W,T4,B9
-application-import-names = wys_ars,tests
-import-order-style = google
-docstring-convention = google
-per-file-ignores = tests/*:S101
