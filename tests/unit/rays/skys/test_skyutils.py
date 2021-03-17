@@ -49,8 +49,8 @@ def test__analytic_Halo_dT_signal_to_SkyArray():
         "Dc": np.array([1050]),
         "theta1_pix": np.array([200]),
         "theta2_pix": np.array([200]),
-        "theta1_vel": np.array([200]),
-        "theta2_vel": np.array([200]),
+        "theta1_tv": np.array([200]),
+        "theta2_tv": np.array([200]),
     }
     map_np = SkyUtils.analytic_Halo_signal_to_SkyArray(
         halo_idx=np.array([0]),
@@ -76,8 +76,8 @@ def test__analytic_Halo_alpha_signal_to_SkyArray():
         "Dc": np.array([1050]),
         "theta1_pix": np.array([200]),
         "theta2_pix": np.array([200]),
-        "theta1_vel": np.array([200]),
-        "theta2_vel": np.array([200]),
+        "theta1_tv": np.array([200]),
+        "theta2_tv": np.array([200]),
     }
     map_np = SkyUtils.analytic_Halo_signal_to_SkyArray(
         halo_idx=np.array([0]),
