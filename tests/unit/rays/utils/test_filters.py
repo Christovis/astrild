@@ -46,6 +46,12 @@ def test__gaussian(img):
     theta = 10. * un.deg
     fwhm_i = 10 * un.arcmin
     fimg = Filters.gaussian(img, theta=theta, fwhm_i=fwhm_i)
-    npt.assert_almost_equal(fimg.max(), 2.0699e-08, decimal=10)
+    npt.assert_almost_equal(fimg.max(), 2.060085e-08, decimal=14)
 
+
+def test__gaussian_high_pass(img):
+    theta = 10. * un.deg
+    fwhm_i = 5 * un.arcmin
+    fimg = Filters.gaussian(img, theta=theta, fwhm_i=fwhm_i)
+    npt.assert_almost_equal(fimg.max(), 2.0674156e-08, decimal=14)
 
